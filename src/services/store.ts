@@ -21,12 +21,12 @@ import {
 } from './mockData';
 
 const STORAGE_KEYS = {
-  PRODUCTS: 'hydee_products_v4',
-  CATEGORIES: 'hydee_categories_v4',
+  PRODUCTS: 'hydee_products_v6',
+  CATEGORIES: 'hydee_categories_v6',
   ORDERS: 'hydee_orders_v2',
   CART: 'hydee_cart_v2',
   ZONES: 'hydee_zones_v2',
-  HERO: 'hydee_hero_v3',
+  HERO: 'hydee_hero_v5',
   SETTINGS: 'hydee_settings_v2',
   PROMO: 'hydee_promo_v2',
   LOGS: 'hydee_logs_v2',

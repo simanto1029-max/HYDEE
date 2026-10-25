@@ -43,7 +43,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
 
   return (
     <div
-      className="group flex flex-col bg-white rounded-xl sm:rounded-2xl border border-neutral-100/90 shadow-[0_2px_12px_rgba(0,0,0,0.04)] hover:shadow-lg transition-all duration-300 overflow-hidden cursor-pointer"
+      className="group flex flex-col bg-white rounded-xl sm:rounded-2xl border border-neutral-100/90 shadow-[0_2px_10px_rgba(0,0,0,0.03)] hover:shadow-xl hover:-translate-y-1 transition-all duration-300 ease-out overflow-hidden cursor-pointer transform-gpu will-change-transform animate-fade-in-up"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       onClick={() => onSelectProduct(product.slug)}
