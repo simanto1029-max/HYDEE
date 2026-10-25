@@ -1,0 +1,6 @@
+{
+  "name": "HYDEE — Luxury Fashion Boutique",
+  "description": "Bespoke luxury fashion boutique crafted in Bangladesh with interactive hanger rack, 360 viewer, advance COD payment, and complete admin portal.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
