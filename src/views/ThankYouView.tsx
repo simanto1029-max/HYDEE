@@ -134,19 +134,27 @@ export const ThankYouView: React.FC<ThankYouViewProps> = ({ orderNumber, onNavig
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 p-5 bg-neutral-50 rounded-2xl border border-neutral-100 text-xs">
             <div>
               <span className="text-neutral-400 block text-[10px] uppercase font-semibold">Order Reference</span>
-              <span className="font-mono font-bold text-neutral-900 text-sm mt-0.5 block">{order.orderNumber}</span>
+              <span className="font-mono font-bold text-neutral-900 text-sm mt-0.5 block tracking-wider tabular-nums">
+                {order.orderNumber}
+              </span>
             </div>
             <div>
               <span className="text-neutral-400 block text-[10px] uppercase font-semibold">Advance Paid</span>
-              <span className="font-bold text-emerald-600 text-sm mt-0.5 block">৳{order.advanceDeliveryFee} (Verified)</span>
+              <span className="font-sans font-bold text-emerald-600 text-sm mt-0.5 block tabular-nums">
+                ৳{order.advanceDeliveryFee} (Verified)
+              </span>
             </div>
             <div>
               <span className="text-neutral-400 block text-[10px] uppercase font-semibold">Doorstep COD Due</span>
-              <span className="font-bold text-[#800000] text-sm mt-0.5 block">৳{order.remainingCodAmount.toLocaleString()}</span>
+              <span className="font-sans font-bold text-[#800000] text-sm mt-0.5 block tabular-nums">
+                ৳{order.remainingCodAmount.toLocaleString()}
+              </span>
             </div>
             <div>
-              <span className="text-neutral-400 block text-[10px] uppercase font-semibold">Assigned Courier</span>
-              <span className="font-semibold text-neutral-800 text-sm mt-0.5 block">{order.courierName} ({order.courierTrackingCode})</span>
+              <span className="text-neutral-400 block text-[10px] uppercase font-semibold">Courier Dispatch</span>
+              <span className="font-sans font-semibold text-neutral-800 text-xs mt-0.5 block">
+                {order.courierTrackingCode ? `${order.courierName} (${order.courierTrackingCode})` : `${order.courierName} · Atelier Packaging`}
+              </span>
             </div>
           </div>
 

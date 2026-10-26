@@ -59,6 +59,17 @@ class StoreService {
 
       const storedOrders = localStorage.getItem(STORAGE_KEYS.ORDERS);
       this.orders = storedOrders ? JSON.parse(storedOrders) : [];
+      // Clean premature tracking codes on orders not yet dispatched
+      if (this.orders && Array.isArray(this.orders)) {
+        this.orders.forEach((o) => {
+          if (o.status !== 'SHIPPED' && o.status !== 'DELIVERED') {
+            delete o.courierTrackingCode;
+          }
+          if (o.status === 'DELIVERED') {
+            o.paymentStatus = 'COD_COLLECTED';
+          }
+        });
+      }
 
       const storedCart = localStorage.getItem(STORAGE_KEYS.CART);
       this.cart = storedCart ? JSON.parse(storedCart) : [];
@@ -587,7 +598,6 @@ class StoreService {
     order.transactionId = transactionId.trim().toUpperCase();
     order.verifiedAt = now;
     order.updatedAt = now;
-    order.courierTrackingCode = `${order.courierName?.toUpperCase() || 'STDF'}-${Math.floor(100000 + Math.random() * 900000)}`;
 
     order.timeline.push({
       timestamp: now,
@@ -605,21 +615,102 @@ class StoreService {
     return { success: true, order };
   }
 
-  updateOrderStatus(orderNumber: string, newStatus: OrderStatus, note?: string, actor: string = 'Staff Admin') {
+  updateOrderStatus(
+    orderNumber: string,
+    newStatus: OrderStatus,
+    note?: string,
+    actor: string = 'Staff Admin',
+    courierData?: { courierName?: string; courierTrackingCode?: string }
+  ) {
     const order = this.getOrderByNumber(orderNumber);
     if (!order) return;
 
+    const now = new Date().toISOString();
     order.status = newStatus;
-    order.updatedAt = new Date().toISOString();
+    order.updatedAt = now;
+
+    if (courierData) {
+      if (courierData.courierName) order.courierName = courierData.courierName;
+      if (courierData.courierTrackingCode) {
+        order.courierTrackingCode = courierData.courierTrackingCode.trim().toUpperCase();
+        order.dispatchedAt = now;
+      }
+    }
+
+    if (newStatus === 'SHIPPED') {
+      if (!order.dispatchedAt) order.dispatchedAt = now;
+    } else if (newStatus === 'DELIVERED') {
+      order.deliveredAt = now;
+      order.paymentStatus = 'COD_COLLECTED';
+    } else if (newStatus === 'CONFIRMED' || newStatus === 'PROCESSING') {
+      if (order.paymentStatus === 'COD_COLLECTED') {
+        order.paymentStatus = 'ADVANCE_VERIFIED';
+      }
+    }
+
     order.timeline.push({
-      timestamp: new Date().toISOString(),
+      timestamp: now,
       status: newStatus,
-      note: note || `Order status updated to ${newStatus}`,
+      note:
+        note ||
+        `Order status updated to ${newStatus}${
+          order.courierTrackingCode ? ` (Consignment ID: ${order.courierTrackingCode})` : ''
+        }`,
       actor,
     });
 
     this.logAudit('Update Order Status', `Order ${order.orderNumber} changed to ${newStatus}`);
     this.persist();
+  }
+
+  dispatchOrder(
+    orderNumber: string,
+    courierName: string,
+    trackingCode: string,
+    note?: string
+  ): boolean {
+    const order = this.getOrderByNumber(orderNumber);
+    if (!order) return false;
+
+    const now = new Date().toISOString();
+    order.status = 'SHIPPED';
+    order.courierName = courierName;
+    order.courierTrackingCode = trackingCode.trim().toUpperCase();
+    order.dispatchedAt = now;
+    order.updatedAt = now;
+
+    order.timeline.push({
+      timestamp: now,
+      status: 'SHIPPED',
+      note: note || `Handed over to ${courierName}. Consignment Tracking ID: ${order.courierTrackingCode}`,
+      actor: 'Staff Admin',
+    });
+
+    this.logAudit('Dispatch Order', `Order ${order.orderNumber} dispatched via ${courierName} (${order.courierTrackingCode})`);
+    this.persist();
+    return true;
+  }
+
+  markOrderDelivered(orderNumber: string, note?: string): boolean {
+    const order = this.getOrderByNumber(orderNumber);
+    if (!order) return false;
+
+    const now = new Date().toISOString();
+    order.status = 'DELIVERED';
+    order.paymentStatus = 'COD_COLLECTED';
+    order.deliveredAt = now;
+    order.updatedAt = now;
+
+    order.timeline.push({
+      timestamp: now,
+      status: 'DELIVERED',
+      note: note || `Parcel delivered to recipient doorstep. Cash on Delivery ৳${order.remainingCodAmount} collected in full.`,
+      actor: 'Courier & Staff Admin',
+    });
+
+    this.logAudit('Order Delivered', `Order ${order.orderNumber} marked delivered. COD ৳${order.remainingCodAmount} collected.`);
+    this.persist();
+    return true;
   }
 
   // --- Hero Slides & Homepage ---

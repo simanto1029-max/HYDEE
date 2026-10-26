@@ -2,12 +2,13 @@
 
 @layer base {
   :root {
-    --font-sans: 'Inter', 'Hind Siliguri', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     --font-serif: 'Cormorant Garamond', Georgia, serif;
     --color-maroon: #800000;
     --color-maroon-dark: #4A0000;
     --color-maroon-deep: #330000;
     --color-maroon-light: #9e1b1b;
+    font-variant-numeric: lining-nums tabular-nums;
   }
 
   html {
@@ -22,11 +23,13 @@
     -webkit-font-smoothing: antialiased;
     letter-spacing: -0.01em;
     overflow-x: hidden;
+    font-variant-numeric: lining-nums tabular-nums;
   }
 
   h1, h2, h3, .font-serif {
     font-family: var(--font-serif);
-    font-feature-settings: "liga" 1, "kern" 1;
+    font-feature-settings: "liga" 1, "kern" 1, "lnum" 1, "tnum" 1;
+    font-variant-numeric: lining-nums tabular-nums;
   }
 }
 

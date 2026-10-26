@@ -10,6 +10,11 @@ import {
   Clock,
   X,
   Plus,
+  Send,
+  Check,
+  Copy,
+  DollarSign,
+  Package,
 } from 'lucide-react';
 import { store } from '../../services/store';
 import { Order, OrderStatus } from '../../types';
@@ -26,18 +31,76 @@ export const AdminOrders: React.FC = () => {
   const [verifyTrxId, setVerifyTrxId] = useState('');
   const [verifyError, setVerifyError] = useState<string | null>(null);
 
-  // Test order creation helper
+  // Dispatch courier modal state
+  const [isDispatchModalOpen, setIsDispatchModalOpen] = useState(false);
+  const [dispatchOrderTarget, setDispatchOrderTarget] = useState<Order | null>(null);
+  const [dispatchCourier, setDispatchCourier] = useState<string>('Steadfast');
+  const [dispatchTrackingCode, setDispatchTrackingCode] = useState('');
+  const [dispatchNote, setDispatchNote] = useState('');
+
+  // Test order notification
   const [testSuccessNotice, setTestSuccessNotice] = useState<string | null>(null);
 
   const refreshOrders = () => {
-    setOrders(store.getOrders());
+    const updated = store.getOrders();
+    setOrders(updated);
     if (selectedOrder) {
       setSelectedOrder(store.getOrderById(selectedOrder.id) || null);
     }
   };
 
   const handleUpdateStatus = (orderNumber: string, newStatus: OrderStatus) => {
+    const target = orders.find((o) => o.orderNumber === orderNumber);
+    if (!target) return;
+
+    if (newStatus === 'SHIPPED') {
+      // Open dispatch modal to set courier and consignment ID
+      openDispatchModal(target);
+      return;
+    }
+
+    if (newStatus === 'DELIVERED') {
+      // Mark delivered and collect COD
+      store.markOrderDelivered(orderNumber);
+      refreshOrders();
+      return;
+    }
+
     store.updateOrderStatus(orderNumber, newStatus, `Staff updated order status to ${newStatus}`);
+    refreshOrders();
+  };
+
+  const openDispatchModal = (order: Order) => {
+    setDispatchOrderTarget(order);
+    setDispatchCourier(order.courierName || 'Steadfast');
+    setDispatchTrackingCode(order.courierTrackingCode || '');
+    setDispatchNote('');
+    setIsDispatchModalOpen(true);
+  };
+
+  const handleConfirmDispatch = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!dispatchOrderTarget) return;
+
+    const code =
+      dispatchTrackingCode.trim() ||
+      `${dispatchCourier.toUpperCase()}-${Math.floor(100000 + Math.random() * 900000)}`;
+
+    store.dispatchOrder(
+      dispatchOrderTarget.orderNumber,
+      dispatchCourier,
+      code,
+      dispatchNote.trim() || undefined
+    );
+
+    setIsDispatchModalOpen(false);
+    setDispatchTrackingCode('');
+    setDispatchNote('');
+    refreshOrders();
+  };
+
+  const handleQuickMarkDelivered = (orderNumber: string) => {
+    store.markOrderDelivered(orderNumber);
     refreshOrders();
   };
 
@@ -66,7 +129,9 @@ export const AdminOrders: React.FC = () => {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (isVerifyModalOpen) {
+        if (isDispatchModalOpen) {
+          setIsDispatchModalOpen(false);
+        } else if (isVerifyModalOpen) {
           setIsVerifyModalOpen(false);
         } else if (selectedOrder) {
           setSelectedOrder(null);
@@ -75,89 +140,98 @@ export const AdminOrders: React.FC = () => {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isVerifyModalOpen, selectedOrder]);
+  }, [isDispatchModalOpen, isVerifyModalOpen, selectedOrder]);
 
   // Helper to place a rapid sandbox test order for QA
-  const handleCreateTestOrder = () => {
-    const products = store.getPublishedProducts();
-    const testProd = products[0];
+  const handlePlaceTestOrder = () => {
+    const prods = store.getProducts().filter((p) => !p.isArchived);
+    if (prods.length === 0) return;
+    const testProd = prods[0];
+    const testVariant = testProd.variants[0];
+
     const result = store.createOrder({
-      customerName: 'Siam Chowdhury (Test Persona)',
-      customerPhone: '01799887766',
+      customerName: 'Test Customer (QA)',
+      customerPhone: '01711000000',
       customerEmail: 'test@hydee.com',
-      deliveryAddress: 'Banani Road 11, House 24',
+      deliveryAddress: 'House 14, Road 7, Banani',
       district: 'Dhaka',
       zoneId: 'zone-dhaka',
-      notes: 'Test QA Order for advance fee and Meta Pixel audit',
       items: [
         {
           productId: testProd.id,
-          variantId: testProd.variants[0].id,
+          variantId: testVariant.id,
           name: testProd.name,
           slug: testProd.slug,
-          imageUrl: testProd.images[0],
-          size: testProd.variants[0].size,
-          color: testProd.variants[0].color,
-          price: testProd.price,
+          imageUrl: testProd.images[0] || '',
+          size: testVariant.size,
+          color: testVariant.color,
+          price: testVariant.price || testProd.price,
           quantity: 1,
-          maxStock: 20,
+          maxStock: testVariant.stock ?? 10,
         },
       ],
       isTestOrder: true,
+      notes: 'Automated test sandbox order',
     });
 
-    if (result.order) {
-      setTestSuccessNotice(`Created sandbox test order #${result.order.orderNumber}`);
+    if (result.success && result.order) {
+      setTestSuccessNotice(`Sandbox test order ${result.order.orderNumber} created!`);
       setTimeout(() => setTestSuccessNotice(null), 4000);
       refreshOrders();
     }
   };
 
-  const filteredOrders = orders.filter((o) => {
-    const query = search.toLowerCase();
-    const matchSearch =
-      o.orderNumber.toLowerCase().includes(query) ||
-      o.customerName.toLowerCase().includes(query) ||
-      o.customerPhone.includes(query);
-    const matchStatus = statusFilter === 'all' || o.status === statusFilter;
-    return matchSearch && matchStatus;
+  // Filter orders
+  const filteredOrders = orders.filter((order) => {
+    const matchesSearch =
+      order.orderNumber.toLowerCase().includes(search.toLowerCase()) ||
+      order.customerName.toLowerCase().includes(search.toLowerCase()) ||
+      order.customerPhone.includes(search) ||
+      (order.courierTrackingCode && order.courierTrackingCode.toLowerCase().includes(search.toLowerCase()));
+
+    const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
+    return matchesSearch && matchesStatus;
   });
 
   return (
     <div className="space-y-6">
-      {/* Header with Test Order Generator */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-6 border-b border-neutral-200 gap-4">
+      {/* Top Action Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-neutral-200">
         <div>
           <span className="text-[11px] font-bold tracking-[0.2em] text-[#800000] uppercase block">
-            FULFILLMENT & PAYMENT AUDIT
+            ATELIER REGISTRY
           </span>
           <h2 className="font-serif text-2xl sm:text-3xl font-bold text-neutral-950 mt-0.5">
-            Order Fulfillment Registry
+            Orders & Cash on Delivery (COD)
           </h2>
         </div>
 
-        <button
-          onClick={handleCreateTestOrder}
-          className="bg-neutral-900 hover:bg-neutral-800 text-white text-xs font-semibold px-4 py-3 rounded-xl uppercase tracking-wider inline-flex items-center gap-2"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Place Sandbox Test Order</span>
-        </button>
+        <div className="flex items-center space-x-3">
+          <button
+            onClick={handlePlaceTestOrder}
+            className="text-xs bg-neutral-100 hover:bg-neutral-200 text-neutral-700 px-3.5 py-2.5 rounded-xl font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+            title="Create a sample test order to verify checkout flow"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Generate Sandbox Test Order</span>
+          </button>
+        </div>
       </div>
 
       {testSuccessNotice && (
-        <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-xl flex items-center justify-between">
+        <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-xl flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
           <span>{testSuccessNotice}</span>
         </div>
       )}
 
-      {/* Filter / Search Bar */}
+      {/* Filter and Search Bar */}
       <div className="flex flex-col sm:flex-row gap-3">
-        <div className="flex-1 relative">
-          <Search className="w-4 h-4 text-neutral-400 absolute left-3.5 top-3.5" />
+        <div className="relative flex-1">
+          <Search className="w-4 h-4 text-neutral-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
           <input
             type="text"
-            placeholder="Search by order #, customer name, or phone (017...)"
+            placeholder="Search by Order Ref (e.g. HYD-2026-9723), Customer Name, Phone, or Consignment ID..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full text-xs pl-10 pr-4 py-3 bg-white border border-neutral-200 rounded-xl focus:border-[#800000] focus:outline-hidden"
@@ -169,9 +243,10 @@ export const AdminOrders: React.FC = () => {
           onChange={(e) => setStatusFilter(e.target.value)}
           className="text-xs px-4 py-3 bg-white border border-neutral-200 rounded-xl focus:border-[#800000] focus:outline-hidden"
         >
-          <option value="all">All Statuses</option>
+          <option value="all">All Statuses ({orders.length})</option>
           <option value="PENDING_ADVANCE">Pending Advance Payment</option>
           <option value="CONFIRMED">Confirmed (Advance Paid)</option>
+          <option value="PROCESSING">Processing (Atelier Packing)</option>
           <option value="SHIPPED">Shipped via Courier</option>
           <option value="DELIVERED">Delivered & COD Collected</option>
           <option value="CANCELLED">Cancelled</option>
@@ -187,10 +262,10 @@ export const AdminOrders: React.FC = () => {
                 <th className="p-4">Order Ref</th>
                 <th className="p-4">Customer</th>
                 <th className="p-4">Total Value</th>
-                <th className="p-4">Advance Fee (Verification)</th>
+                <th className="p-4">Advance Fee (Deposit)</th>
                 <th className="p-4">Doorstep COD</th>
-                <th className="p-4">Courier & Status</th>
-                <th className="p-4 text-right">Action</th>
+                <th className="p-4">Order Status & Courier</th>
+                <th className="p-4 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-100">
@@ -201,100 +276,163 @@ export const AdminOrders: React.FC = () => {
                   </td>
                 </tr>
               ) : (
-                filteredOrders.map((order) => (
-                  <tr key={order.id} className="hover:bg-neutral-50/50 transition-colors">
-                    <td className="p-4 font-mono font-bold text-neutral-900">
-                      {order.orderNumber}
-                      {order.isTestOrder && (
-                        <span className="ml-1.5 text-[9px] bg-amber-100 text-amber-900 px-1.5 py-0.5 rounded-sm font-sans font-bold">
-                          SANDBOX TEST
-                        </span>
-                      )}
-                    </td>
-                    <td className="p-4">
-                      <p className="font-semibold text-neutral-900">{order.customerName}</p>
-                      <p className="text-[10px] text-neutral-500">{order.customerPhone}</p>
-                      <p className="text-[10px] text-neutral-400 truncate max-w-xs">{order.district}</p>
-                    </td>
-                    <td className="p-4 font-bold text-neutral-900">
-                      ৳{order.totalAmount.toLocaleString()}
-                    </td>
-                    <td className="p-4">
-                      {order.paymentStatus === 'ADVANCE_VERIFIED' ? (
-                        <div>
-                          <span className="text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md text-[10px] font-bold flex items-center gap-1 w-fit">
-                            <ShieldCheck className="w-3 h-3" />
-                            ৳{order.advanceDeliveryFee} Verified
+                filteredOrders.map((order) => {
+                  const isDelivered =
+                    order.status === 'DELIVERED' || order.paymentStatus === 'COD_COLLECTED';
+                  const isShipped = order.status === 'SHIPPED';
+
+                  return (
+                    <tr key={order.id} className="hover:bg-neutral-50/50 transition-colors">
+                      <td className="p-4 font-mono font-bold text-neutral-900 tracking-wider tabular-nums">
+                        {order.orderNumber}
+                        {order.isTestOrder && (
+                          <span className="ml-1.5 text-[9px] bg-amber-100 text-amber-900 px-1.5 py-0.5 rounded-sm font-sans font-bold">
+                            SANDBOX
                           </span>
-                          <span className="text-[10px] text-neutral-500 block mt-0.5 font-mono">
-                            {order.advancePaymentMethod?.toUpperCase()} · {order.transactionId}
-                          </span>
+                        )}
+                      </td>
+                      <td className="p-4">
+                        <p className="font-semibold text-neutral-900">{order.customerName}</p>
+                        <p className="font-mono text-[11px] text-neutral-500 tabular-nums">
+                          {order.customerPhone}
+                        </p>
+                        <p className="text-[10px] text-neutral-400 truncate max-w-xs">{order.district}</p>
+                      </td>
+                      <td className="p-4 font-sans font-bold text-neutral-900 tabular-nums">
+                        ৳{order.totalAmount.toLocaleString()}
+                      </td>
+                      <td className="p-4">
+                        {order.paymentStatus === 'ADVANCE_VERIFIED' ? (
+                          <div>
+                            <span className="text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md text-[10px] font-bold font-sans tabular-nums flex items-center gap-1 w-fit">
+                              <ShieldCheck className="w-3 h-3" />
+                              ৳{order.advanceDeliveryFee} Verified
+                            </span>
+                            <span className="text-[10px] text-neutral-500 block mt-0.5 font-mono">
+                              {order.advancePaymentMethod?.toUpperCase()} · {order.transactionId}
+                            </span>
+                          </div>
+                        ) : (
+                          <div>
+                            <span className="text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md text-[10px] font-bold font-sans tabular-nums block w-fit">
+                              Pending ৳{order.advanceDeliveryFee}
+                            </span>
+                            <button
+                              onClick={() => {
+                                setSelectedOrder(order);
+                                setIsVerifyModalOpen(true);
+                              }}
+                              className="text-[10px] text-[#800000] font-semibold hover:underline mt-1 block"
+                            >
+                              + Manual Verify TrxID
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                      <td className="p-4">
+                        {isDelivered ? (
+                          <div>
+                            <span className="text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-md text-[10px] font-bold font-sans tabular-nums inline-flex items-center gap-1">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                              ৳{order.remainingCodAmount.toLocaleString()} Collected
+                            </span>
+                            <span className="text-[10px] text-neutral-400 block mt-0.5">Paid on Delivery</span>
+                          </div>
+                        ) : (
+                          <div>
+                            <span className="font-sans font-bold text-[#800000] tabular-nums block">
+                              ৳{order.remainingCodAmount.toLocaleString()}
+                            </span>
+                            <span className="text-[10px] text-neutral-400 block">Pending Courier Handover</span>
+                          </div>
+                        )}
+                      </td>
+                      <td className="p-4">
+                        <select
+                          value={order.status}
+                          onChange={(e) => handleUpdateStatus(order.orderNumber, e.target.value as OrderStatus)}
+                          className={`text-[11px] font-bold px-2.5 py-1 rounded-lg border focus:outline-hidden ${
+                            order.status === 'CONFIRMED'
+                              ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                              : order.status === 'PROCESSING'
+                              ? 'bg-purple-50 text-purple-800 border-purple-200'
+                              : order.status === 'SHIPPED'
+                              ? 'bg-blue-50 text-blue-800 border-blue-200'
+                              : order.status === 'DELIVERED'
+                              ? 'bg-neutral-900 text-white border-neutral-900'
+                              : order.status === 'CANCELLED'
+                              ? 'bg-red-50 text-red-800 border-red-200'
+                              : 'bg-amber-50 text-amber-800 border-amber-200'
+                          }`}
+                        >
+                          <option value="PENDING_ADVANCE">Pending Advance</option>
+                          <option value="CONFIRMED">Confirmed</option>
+                          <option value="PROCESSING">Atelier Packing</option>
+                          <option value="SHIPPED">Shipped (Courier)</option>
+                          <option value="DELIVERED">Delivered (COD Paid)</option>
+                          <option value="CANCELLED">Cancelled</option>
+                        </select>
+
+                        {/* Courier Details Line */}
+                        <div className="mt-1 text-[10px]">
+                          {order.courierTrackingCode ? (
+                            <span className="text-neutral-700 font-medium flex items-center gap-1">
+                              <Truck className="w-3 h-3 text-blue-600" />
+                              <span>{order.courierName}: </span>
+                              <span className="font-mono font-bold text-neutral-900">{order.courierTrackingCode}</span>
+                            </span>
+                          ) : (
+                            <span className="text-neutral-400">
+                              {order.courierName} · Not Dispatched
+                            </span>
+                          )}
                         </div>
-                      ) : (
-                        <div>
-                          <span className="text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md text-[10px] font-bold block w-fit">
-                            Pending ৳{order.advanceDeliveryFee}
-                          </span>
-                          <button
-                            onClick={() => {
-                              setSelectedOrder(order);
-                              setIsVerifyModalOpen(true);
-                            }}
-                            className="text-[10px] text-[#800000] font-semibold hover:underline mt-1 block"
-                          >
-                            + Manual Verify TrxID
-                          </button>
-                        </div>
-                      )}
-                    </td>
-                    <td className="p-4 font-bold text-[#800000]">
-                      ৳{order.remainingCodAmount.toLocaleString()}
-                    </td>
-                    <td className="p-4">
-                      <select
-                        value={order.status}
-                        onChange={(e) => handleUpdateStatus(order.orderNumber, e.target.value as OrderStatus)}
-                        className={`text-[11px] font-bold px-2 py-1 rounded-lg border focus:outline-hidden ${
-                          order.status === 'CONFIRMED'
-                            ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                            : order.status === 'SHIPPED'
-                            ? 'bg-blue-50 text-blue-800 border-blue-200'
-                            : order.status === 'DELIVERED'
-                            ? 'bg-neutral-900 text-white border-neutral-900'
-                            : order.status === 'CANCELLED'
-                            ? 'bg-red-50 text-red-800 border-red-200'
-                            : 'bg-amber-50 text-amber-800 border-amber-200'
-                        }`}
-                      >
-                        <option value="PENDING_ADVANCE">Pending Advance</option>
-                        <option value="CONFIRMED">Confirmed</option>
-                        <option value="SHIPPED">Shipped (Courier)</option>
-                        <option value="DELIVERED">Delivered (COD Paid)</option>
-                        <option value="CANCELLED">Cancelled</option>
-                      </select>
-                      <span className="text-[10px] text-neutral-400 block mt-0.5">
-                        {order.courierName} ({order.courierTrackingCode || 'No Tracking'})
-                      </span>
-                    </td>
-                    <td className="p-4 text-right">
-                      <button
-                        onClick={() => setSelectedOrder(order)}
-                        className="text-xs text-[#800000] font-semibold hover:underline inline-flex items-center gap-1"
-                      >
-                        <Eye className="w-3.5 h-3.5" />
-                        <span>Inspect</span>
-                      </button>
-                    </td>
-                  </tr>
-                ))
+                      </td>
+                      <td className="p-4 text-right space-x-1.5 whitespace-nowrap">
+                        {/* Quick Action Button */}
+                        {!isDelivered && (
+                          <>
+                            {!isShipped ? (
+                              <button
+                                onClick={() => openDispatchModal(order)}
+                                className="text-[11px] bg-blue-50 hover:bg-blue-100 text-blue-700 px-2.5 py-1 rounded-md font-semibold inline-flex items-center gap-1 cursor-pointer"
+                                title="Dispatch parcel via courier with consignment ID"
+                              >
+                                <Truck className="w-3 h-3" />
+                                <span>Dispatch</span>
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => handleQuickMarkDelivered(order.orderNumber)}
+                                className="text-[11px] bg-emerald-50 hover:bg-emerald-100 text-emerald-800 px-2.5 py-1 rounded-md font-semibold inline-flex items-center gap-1 cursor-pointer"
+                                title="Mark order as delivered and COD collected"
+                              >
+                                <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                <span>Collect COD</span>
+                              </button>
+                            )}
+                          </>
+                        )}
+
+                        <button
+                          onClick={() => setSelectedOrder(order)}
+                          className="text-xs text-[#800000] font-semibold hover:underline inline-flex items-center gap-1 cursor-pointer"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          <span>Dossier</span>
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* Order Detail Modal */}
-      {selectedOrder && !isVerifyModalOpen && (
+      {/* Order Dossier Detail Modal */}
+      {selectedOrder && !isVerifyModalOpen && !isDispatchModalOpen && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-xs animate-in fade-in duration-200"
           onClick={(e) => {
@@ -305,9 +443,9 @@ export const AdminOrders: React.FC = () => {
             <div className="sticky top-0 z-20 bg-white/95 backdrop-blur-md px-6 py-4 border-b border-neutral-100 flex items-center justify-between shrink-0">
               <div>
                 <span className="text-[10px] font-bold text-[#800000] tracking-widest uppercase block">
-                  ORDER DOSSIER
+                  ORDER DOSSIER & COD DISPATCH
                 </span>
-                <h3 className="font-mono text-xl font-bold text-neutral-950">
+                <h3 className="font-mono text-xl font-bold text-neutral-950 tracking-wider tabular-nums">
                   {selectedOrder.orderNumber}
                 </h3>
               </div>
@@ -327,33 +465,115 @@ export const AdminOrders: React.FC = () => {
                 <div>
                   <span className="text-neutral-400 uppercase text-[10px] font-semibold block">Customer Details</span>
                   <p className="font-bold text-neutral-900 mt-1">{selectedOrder.customerName}</p>
-                  <p className="text-neutral-600">{selectedOrder.customerPhone}</p>
-                  <p className="text-neutral-500">{selectedOrder.customerEmail || 'No email provided'}</p>
+                  <p className="font-mono text-neutral-600 tabular-nums">{selectedOrder.customerPhone}</p>
+                  {selectedOrder.customerEmail && <p className="text-neutral-500">{selectedOrder.customerEmail}</p>}
                 </div>
                 <div>
-                  <span className="text-neutral-400 uppercase text-[10px] font-semibold block">Delivery Address</span>
+                  <span className="text-neutral-400 uppercase text-[10px] font-semibold block">Delivery Destination</span>
                   <p className="text-neutral-800 mt-1">{selectedOrder.deliveryAddress}</p>
-                  <p className="text-neutral-600">{selectedOrder.district}, Bangladesh ({selectedOrder.zoneName})</p>
-                  {selectedOrder.notes && <p className="text-neutral-400 italic mt-1">Note: {selectedOrder.notes}</p>}
+                  <p className="text-neutral-600 font-semibold">{selectedOrder.district} ({selectedOrder.zoneName})</p>
                 </div>
               </div>
 
-              {/* Items */}
+              {/* Courier Dispatching Status Box */}
+              <div className="p-4 border border-neutral-200 rounded-xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Truck className="w-4 h-4 text-[#800000]" />
+                    <span className="font-bold text-neutral-900">Courier Handover & Consignment</span>
+                  </div>
+                  <button
+                    onClick={() => openDispatchModal(selectedOrder)}
+                    className="text-xs bg-[#800000] hover:bg-[#600000] text-white px-3 py-1.5 rounded-lg font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                  >
+                    <Send className="w-3 h-3" />
+                    <span>{selectedOrder.courierTrackingCode ? 'Update Consignment' : 'Dispatch via Courier'}</span>
+                  </button>
+                </div>
+
+                {selectedOrder.courierTrackingCode ? (
+                  <div className="p-3 bg-blue-50/60 border border-blue-200 rounded-lg text-[11px] space-y-1">
+                    <p className="font-semibold text-blue-900">
+                      Dispatched via {selectedOrder.courierName}
+                    </p>
+                    <p className="text-neutral-700">
+                      Official Consignment ID:{' '}
+                      <span className="font-mono font-bold bg-white px-2 py-0.5 border border-blue-200 rounded text-neutral-950">
+                        {selectedOrder.courierTrackingCode}
+                      </span>
+                    </p>
+                    {selectedOrder.dispatchedAt && (
+                      <p className="text-neutral-500 text-[10px]">
+                        Handed over on: {new Date(selectedOrder.dispatchedAt).toLocaleString()}
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-neutral-500 text-[11px]">
+                    Parcel is currently in Atelier Packaging. No consignment tracking code has been issued yet. Click &ldquo;Dispatch via Courier&rdquo; once handed to courier.
+                  </p>
+                )}
+              </div>
+
+              {/* Doorstep COD Settlement Box */}
+              <div className="p-4 border border-neutral-200 rounded-xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <DollarSign className="w-4 h-4 text-[#800000]" />
+                    <span className="font-bold text-neutral-900">Doorstep Cash on Delivery (COD)</span>
+                  </div>
+                  {selectedOrder.status !== 'DELIVERED' && selectedOrder.paymentStatus !== 'COD_COLLECTED' && (
+                    <button
+                      onClick={() => handleQuickMarkDelivered(selectedOrder.orderNumber)}
+                      className="text-xs bg-emerald-700 hover:bg-emerald-800 text-white px-3 py-1.5 rounded-lg font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>Mark Delivered & Collect COD</span>
+                    </button>
+                  )}
+                </div>
+
+                {selectedOrder.status === 'DELIVERED' || selectedOrder.paymentStatus === 'COD_COLLECTED' ? (
+                  <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-900 font-sans tabular-nums text-xs font-semibold flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>
+                      Cash on Delivery collected in full: ৳{selectedOrder.remainingCodAmount.toLocaleString()} Paid upon delivery.
+                    </span>
+                  </div>
+                ) : (
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-900 text-[11px] space-y-1">
+                    <p className="font-semibold">
+                      Pending Collection: <span className="font-sans font-bold tabular-nums">৳{selectedOrder.remainingCodAmount.toLocaleString()}</span>
+                    </p>
+                    <p className="text-neutral-600 text-[10px]">
+                      This amount will be collected by courier rider upon doorstep delivery. Once the courier marks it delivered, click &ldquo;Mark Delivered & Collect COD&rdquo; above.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Garments in Order */}
               <div>
                 <span className="font-serif text-sm font-bold text-neutral-950 block mb-3">
-                  Garments in Order
+                  Garments in Order ({selectedOrder.items.length})
                 </span>
                 <div className="space-y-3">
                   {selectedOrder.items.map((item, idx) => (
                     <div key={idx} className="flex items-center justify-between pb-3 border-b border-neutral-100">
                       <div className="flex items-center space-x-3">
-                        <img src={item.imageUrl} alt={item.productName} className="w-12 h-14 object-cover rounded-md bg-neutral-100" />
+                        <img
+                          src={item.imageUrl}
+                          alt={item.productName}
+                          className="w-12 h-14 object-cover rounded-md bg-neutral-100"
+                        />
                         <div>
                           <p className="font-semibold text-neutral-900">{item.productName}</p>
-                          <p className="text-neutral-500">{item.variantName} × {item.quantity}</p>
+                          <p className="text-neutral-500 font-sans tabular-nums">
+                            {item.variantName} × {item.quantity}
+                          </p>
                         </div>
                       </div>
-                      <span className="font-bold text-neutral-950">
+                      <span className="font-sans font-bold text-neutral-950 tabular-nums">
                         ৳{(item.price * item.quantity).toLocaleString()}
                       </span>
                     </div>
@@ -365,32 +585,41 @@ export const AdminOrders: React.FC = () => {
               <div className="p-4 bg-neutral-50 rounded-xl space-y-2">
                 <div className="flex justify-between">
                   <span>Subtotal:</span>
-                  <span className="font-bold">৳{selectedOrder.subtotal.toLocaleString()}</span>
+                  <span className="font-sans font-bold tabular-nums">
+                    ৳{selectedOrder.subtotal.toLocaleString()}
+                  </span>
                 </div>
                 <div className="flex justify-between text-[#800000]">
                   <span>Advance Delivery Fee:</span>
-                  <span className="font-bold">৳{selectedOrder.advanceDeliveryFee}</span>
+                  <span className="font-sans font-bold tabular-nums">
+                    ৳{selectedOrder.advanceDeliveryFee}
+                  </span>
                 </div>
                 {selectedOrder.discountAmount > 0 && (
                   <div className="flex justify-between text-emerald-600">
                     <span>Discount ({selectedOrder.discountCode}):</span>
-                    <span>-৳{selectedOrder.discountAmount.toLocaleString()}</span>
+                    <span className="font-sans font-bold tabular-nums">
+                      -৳{selectedOrder.discountAmount.toLocaleString()}
+                    </span>
                   </div>
                 )}
                 <div className="flex justify-between pt-2 border-t border-neutral-200 text-sm font-bold">
                   <span>Total Order Value:</span>
-                  <span>৳{selectedOrder.totalAmount.toLocaleString()}</span>
+                  <span className="font-sans tabular-nums">৳{selectedOrder.totalAmount.toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between text-xs font-bold text-[#800000] pt-1">
-                  <span>Remaining Cash on Delivery:</span>
-                  <span>৳{selectedOrder.remainingCodAmount.toLocaleString()}</span>
+                  <span>Doorstep COD Balance:</span>
+                  <span className="font-sans tabular-nums">
+                    ৳{selectedOrder.remainingCodAmount.toLocaleString()}{' '}
+                    {selectedOrder.status === 'DELIVERED' ? '(Collected)' : '(Due)'}
+                  </span>
                 </div>
               </div>
 
               {/* Advance Payment Details */}
               <div className="p-4 border border-neutral-200 rounded-xl space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="font-bold text-neutral-900">Advance Payment Verification</span>
+                  <span className="font-bold text-neutral-900">Advance Payment Deposit</span>
                   {selectedOrder.paymentStatus === 'ADVANCE_VERIFIED' ? (
                     <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-sm font-bold text-[10px]">
                       VERIFIED
@@ -398,7 +627,7 @@ export const AdminOrders: React.FC = () => {
                   ) : (
                     <button
                       onClick={() => setIsVerifyModalOpen(true)}
-                      className="text-xs bg-[#800000] text-white px-3 py-1 rounded-lg font-semibold"
+                      className="text-xs bg-[#800000] text-white px-3 py-1 rounded-lg font-semibold cursor-pointer"
                     >
                       Verify Now
                     </button>
@@ -424,7 +653,7 @@ export const AdminOrders: React.FC = () => {
                   {selectedOrder.timeline.map((t, idx) => (
                     <div key={idx} className="p-2 bg-neutral-50 rounded-lg text-[11px]">
                       <span className="font-semibold text-neutral-800">{t.note}</span>
-                      <p className="text-[10px] text-neutral-400 mt-0.5">
+                      <p className="text-[10px] text-neutral-400 mt-0.5 font-sans tabular-nums">
                         {new Date(t.timestamp).toLocaleString()} · {t.actor}
                       </p>
                     </div>
@@ -432,6 +661,111 @@ export const AdminOrders: React.FC = () => {
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Dispatch Courier Modal */}
+      {isDispatchModalOpen && dispatchOrderTarget && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-xs animate-in fade-in duration-200"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setIsDispatchModalOpen(false);
+          }}
+        >
+          <div className="bg-white rounded-2xl sm:rounded-3xl max-w-md w-full max-h-[92vh] flex flex-col shadow-2xl border border-neutral-200 overflow-hidden relative">
+            <div className="sticky top-0 z-20 bg-white/95 backdrop-blur-md px-6 py-4 border-b border-neutral-100 flex items-center justify-between shrink-0">
+              <div>
+                <span className="text-[10px] font-bold text-[#800000] tracking-widest uppercase block">
+                  COURIER HANDOVER
+                </span>
+                <h3 className="font-mono text-lg font-bold text-neutral-950">
+                  Dispatch: {dispatchOrderTarget.orderNumber}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsDispatchModalOpen(false)}
+                className="w-8 h-8 rounded-full bg-neutral-100 hover:bg-neutral-200 text-neutral-600 hover:text-neutral-950 flex items-center justify-center transition-colors cursor-pointer"
+                aria-label="Close"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleConfirmDispatch} className="p-6 space-y-4 text-xs overflow-y-auto flex-1">
+              <p className="text-neutral-600">
+                Specify the genuine courier partner and consignment code. This will update the status to <strong>Shipped</strong> and appear on the customer&rsquo;s live tracking screen.
+              </p>
+
+              <div>
+                <label className="block font-semibold mb-1 text-neutral-900">Courier Partner</label>
+                <select
+                  value={dispatchCourier}
+                  onChange={(e) => setDispatchCourier(e.target.value)}
+                  className="w-full p-3 border border-neutral-200 rounded-xl bg-white font-medium"
+                >
+                  <option value="Steadfast">Steadfast Courier</option>
+                  <option value="Pathao">Pathao Express</option>
+                  <option value="Paperfly">Paperfly</option>
+                  <option value="RedX">RedX Logistics</option>
+                  <option value="eCourier">eCourier</option>
+                  <option value="Hand Delivery">Internal Atelier Concierge</option>
+                </select>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="font-semibold text-neutral-900">Consignment ID / Tracking Number</label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDispatchTrackingCode(
+                        `${dispatchCourier.toUpperCase().slice(0, 4)}-${Math.floor(100000 + Math.random() * 900000)}`
+                      );
+                    }}
+                    className="text-[10px] text-[#800000] hover:underline font-semibold cursor-pointer"
+                  >
+                    + Auto-Generate
+                  </button>
+                </div>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. STDF-849201 or 9283749"
+                  value={dispatchTrackingCode}
+                  onChange={(e) => setDispatchTrackingCode(e.target.value)}
+                  className="w-full p-3 border border-neutral-200 rounded-xl uppercase font-mono tracking-wider font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold mb-1 text-neutral-900">Dispatch Note (Optional)</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Handed over to rider at Banani hub"
+                  value={dispatchNote}
+                  onChange={(e) => setDispatchNote(e.target.value)}
+                  className="w-full p-3 border border-neutral-200 rounded-xl"
+                />
+              </div>
+
+              <div className="pt-2 flex justify-end space-x-2 border-t border-neutral-100">
+                <button
+                  type="button"
+                  onClick={() => setIsDispatchModalOpen(false)}
+                  className="px-4 py-2.5 border border-neutral-200 rounded-xl cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 bg-[#800000] hover:bg-[#600000] text-white rounded-xl font-semibold uppercase tracking-wider cursor-pointer"
+                >
+                  Confirm Dispatch
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
@@ -471,52 +805,52 @@ export const AdminOrders: React.FC = () => {
               )}
 
               <form onSubmit={handleManualVerifyPayment} className="space-y-4">
-              <div>
-                <label className="block font-semibold mb-1">Payment Method</label>
-                <select
-                  value={verifyMethod}
-                  onChange={(e) => setVerifyMethod(e.target.value as any)}
-                  className="w-full p-3 border border-neutral-200 rounded-xl"
-                >
-                  <option value="bkash">bKash Merchant / Personal</option>
-                  <option value="nagad">Nagad Merchant</option>
-                  <option value="rocket">Rocket</option>
-                  <option value="manual_deposit">Manual Bank / Counter Deposit</option>
-                </select>
-              </div>
+                <div>
+                  <label className="block font-semibold mb-1">Payment Method</label>
+                  <select
+                    value={verifyMethod}
+                    onChange={(e) => setVerifyMethod(e.target.value as any)}
+                    className="w-full p-3 border border-neutral-200 rounded-xl"
+                  >
+                    <option value="bkash">bKash Merchant / Personal</option>
+                    <option value="nagad">Nagad Merchant</option>
+                    <option value="rocket">Rocket</option>
+                    <option value="manual_deposit">Manual Bank / Counter Deposit</option>
+                  </select>
+                </div>
 
-              <div>
-                <label className="block font-semibold mb-1">Transaction ID / Reference *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. 9K2837L10"
-                  value={verifyTrxId}
-                  onChange={(e) => setVerifyTrxId(e.target.value)}
-                  className="w-full p-3 border border-neutral-200 rounded-xl uppercase font-mono"
-                />
-              </div>
+                <div>
+                  <label className="block font-semibold mb-1">Transaction ID / Reference *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. 9K2837L10"
+                    value={verifyTrxId}
+                    onChange={(e) => setVerifyTrxId(e.target.value)}
+                    className="w-full p-3 border border-neutral-200 rounded-xl uppercase font-mono"
+                  />
+                </div>
 
-              <div className="pt-2 flex justify-end space-x-2">
-                <button
-                  type="button"
-                  onClick={() => setIsVerifyModalOpen(false)}
-                  className="px-4 py-2.5 border rounded-xl"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2.5 bg-[#800000] text-white rounded-xl font-semibold uppercase"
-                >
-                  Confirm & Deduct Stock
-                </button>
-              </div>
-            </form>
+                <div className="pt-2 flex justify-end space-x-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsVerifyModalOpen(false)}
+                    className="px-4 py-2.5 border rounded-xl"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2.5 bg-[#800000] text-white rounded-xl font-semibold uppercase"
+                  >
+                    Confirm & Deduct Stock
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
         </div>
-      </div>
-    )}
-  </div>
-);
+      )}
+    </div>
+  );
 };

@@ -104,6 +104,8 @@ export type OrderStatus =
 export type PaymentStatus =
   | 'UNPAID'
   | 'ADVANCE_VERIFIED'
+  | 'COD_COLLECTED'
+  | 'FULLY_PAID'
   | 'FAILED'
   | 'MANUAL_REVIEW'
   | 'REFUNDED';
@@ -141,7 +143,9 @@ export interface Order {
   advancePaymentMethod?: 'bkash' | 'nagad' | 'rocket' | 'card' | 'manual_deposit';
   transactionId?: string;
   verifiedAt?: string;
-  courierName?: 'Steadfast' | 'Pathao' | 'Paperfly';
+  dispatchedAt?: string;
+  deliveredAt?: string;
+  courierName?: 'Steadfast' | 'Pathao' | 'Paperfly' | 'RedX' | 'eCourier' | string;
   courierTrackingCode?: string;
   isTestOrder: boolean;
   createdAt: string;
