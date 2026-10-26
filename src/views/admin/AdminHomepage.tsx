@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Plus, Edit2, Trash2, ArrowUp, ArrowDown, Sparkles, Check, Image as ImageIcon } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Plus, Edit2, Trash2, ArrowUp, ArrowDown, Sparkles, Check, Image as ImageIcon, X } from 'lucide-react';
 import { store } from '../../services/store';
 import { HeroSlide, Product } from '../../types';
 
@@ -72,6 +72,16 @@ export const AdminHomepage: React.FC = () => {
     setSavedNotice(`Updated bestseller status for ${p.name}`);
     setTimeout(() => setSavedNotice(null), 2500);
   };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && editingSlide) {
+        setEditingSlide(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [editingSlide]);
 
   return (
     <div className="space-y-10">
@@ -231,12 +241,28 @@ export const AdminHomepage: React.FC = () => {
 
       {/* Edit Slide Modal */}
       {editingSlide && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-neutral-200">
-            <h3 className="font-serif text-lg font-bold text-neutral-950">
-              Edit Campaign Slide
-            </h3>
-            <form onSubmit={handleSaveSlide} className="mt-4 space-y-4 text-xs">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-xs animate-in fade-in duration-200"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setEditingSlide(null);
+          }}
+        >
+          <div className="bg-white rounded-2xl sm:rounded-3xl max-w-lg w-full max-h-[92vh] flex flex-col shadow-2xl border border-neutral-200 overflow-hidden relative">
+            <div className="sticky top-0 z-20 bg-white/95 backdrop-blur-md px-6 py-4 border-b border-neutral-100 flex items-center justify-between shrink-0">
+              <h3 className="font-serif text-lg font-bold text-neutral-950">
+                Edit Campaign Slide
+              </h3>
+              <button
+                type="button"
+                onClick={() => setEditingSlide(null)}
+                className="w-8 h-8 rounded-full bg-neutral-100 hover:bg-neutral-200 text-neutral-600 hover:text-neutral-950 flex items-center justify-center transition-colors cursor-pointer"
+                aria-label="Close"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveSlide} className="overflow-y-auto p-6 space-y-4 text-xs flex-1 touch-scroll">
               <div>
                 <label className="block font-semibold mb-1">Headline *</label>
                 <input
@@ -304,13 +330,13 @@ export const AdminHomepage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setEditingSlide(null)}
-                  className="px-4 py-2.5 border rounded-xl"
+                  className="px-4 py-2.5 border rounded-xl hover:bg-neutral-50 cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2.5 bg-[#800000] text-white rounded-xl font-semibold uppercase"
+                  className="px-5 py-2.5 bg-[#800000] text-white rounded-xl font-semibold uppercase hover:bg-[#660000] cursor-pointer"
                 >
                   Save Slide
                 </button>

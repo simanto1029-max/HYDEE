@@ -43,18 +43,33 @@ export const PromotionalPopup: React.FC<PromotionalPopupProps> = ({ onNavigate }
     onNavigate(popupConfig.targetUrl || '/products');
   };
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isVisible) {
+        handleDismiss();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isVisible]);
+
   if (!isVisible || !popupConfig.isEnabled) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-300">
-      <div className="relative w-full max-w-2xl bg-white rounded-3xl overflow-hidden shadow-2xl border border-neutral-100 flex flex-col md:flex-row">
-        {/* Close Button */}
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-xs animate-in fade-in duration-200"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) handleDismiss();
+      }}
+    >
+      <div className="relative w-full max-w-2xl max-h-[92vh] overflow-y-auto bg-white rounded-2xl sm:rounded-3xl shadow-2xl border border-neutral-100 flex flex-col md:flex-row touch-scroll">
+        {/* Prominent High-Visibility Close Button */}
         <button
           onClick={handleDismiss}
-          className="absolute top-4 right-4 z-20 w-8 h-8 rounded-full bg-white/80 hover:bg-white text-neutral-600 flex items-center justify-center transition-colors shadow-sm"
+          className="absolute top-3.5 right-3.5 z-30 w-9 h-9 rounded-full bg-black/60 hover:bg-black/80 md:bg-white/90 md:hover:bg-white text-white md:text-neutral-700 flex items-center justify-center transition-all shadow-md cursor-pointer active:scale-95"
           aria-label="Close promotion"
         >
-          <X className="w-4 h-4" />
+          <X className="w-5 h-5" />
         </button>
 
         {/* Left Side Imagery */}

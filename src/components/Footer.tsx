@@ -156,13 +156,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
         {/* Minimal Bottom Bar */}
         <div className="pt-4 border-t border-neutral-100 flex flex-col sm:flex-row items-center justify-between text-[11px] text-neutral-400 gap-2">
           <p>© 2026 HYDEE Atelier. All Rights Reserved.</p>
-          <button
-            onClick={() => onNavigate('/admin')}
-            className="inline-flex items-center text-neutral-500 hover:text-[#800000] transition-colors cursor-pointer"
-          >
-            <Lock className="w-3 h-3 mr-1 text-[#800000]" />
-            Store Admin
-          </button>
+          <p className="text-[10px] text-neutral-400">Bespoke Luxury Crafted in Bangladesh</p>
         </div>
 
       </div>

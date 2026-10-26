@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Search, X, ArrowRight } from 'lucide-react';
 import { store } from '../services/store';
 
@@ -16,6 +16,16 @@ export const SearchModal: React.FC<SearchModalProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const products = store.getPublishedProducts();
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isOpen) {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   const results = searchTerm.trim()
@@ -28,14 +38,23 @@ export const SearchModal: React.FC<SearchModalProps> = ({
     : [];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-20 px-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center pt-20 px-4 bg-black/70 backdrop-blur-xs animate-in fade-in duration-200"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
       <div className="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-8 shadow-2xl border border-neutral-100 space-y-6">
         <div className="flex items-center justify-between pb-3 border-b border-neutral-100">
           <span className="font-serif text-lg font-bold text-neutral-950">
             Search HYDEE Atelier
           </span>
-          <button onClick={onClose} className="p-1 text-neutral-400 hover:text-neutral-900 cursor-pointer">
-            <X className="w-5 h-5" />
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded-full bg-neutral-100 hover:bg-neutral-200 text-neutral-600 hover:text-neutral-950 flex items-center justify-center transition-colors cursor-pointer"
+            aria-label="Close search"
+          >
+            <X className="w-4 h-4" />
           </button>
         </div>
 

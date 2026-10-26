@@ -7,6 +7,7 @@ import {
   ArrowRight,
   Loader2,
   Tag,
+  X,
 } from 'lucide-react';
 import { store } from '../services/store';
 import { metaPixel } from '../services/metaPixel';
@@ -135,6 +136,17 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
     setPendingOrder(result.order);
   };
 
+  // Escape key handler for advance payment modal
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && pendingOrder) {
+        setPendingOrder(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [pendingOrder]);
+
   // Step 2: Customer pays advance delivery fee
   const handleVerifyAdvancePayment = () => {
     if (!pendingOrder) return;
@@ -150,9 +162,9 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
 
     setTimeout(() => {
       const verifyResult = store.verifyAdvancePayment(
-        pendingOrder.id,
+        pendingOrder.orderNumber,
         paymentMethod,
-        transactionId,
+        cleanTrx,
         `${paymentMethod.toUpperCase()} Gateway Callback (Verified)`
       );
 
@@ -503,30 +515,48 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
 
       {/* Advance Delivery Payment Gateway Modal */}
       {pendingOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl border border-neutral-200">
-            <div className="flex items-center justify-between pb-4 border-b border-neutral-100">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-xs animate-in fade-in"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setPendingOrder(null);
+          }}
+        >
+          <div className="bg-white rounded-2xl sm:rounded-3xl max-w-lg w-full max-h-[92vh] flex flex-col shadow-2xl border border-neutral-200 overflow-hidden relative">
+            {/* Sticky Header with prominent, easy-to-click close button */}
+            <div className="sticky top-0 z-20 bg-white/95 backdrop-blur-md px-5 sm:px-6 py-4 border-b border-neutral-100 flex items-center justify-between shrink-0">
               <div>
-                <span className="text-[10px] font-bold tracking-widest text-[#800000] uppercase">
+                <span className="text-[10px] font-bold tracking-widest text-[#800000] uppercase block">
                   Step 2 of 2: Verified Advance Payment
                 </span>
-                <h3 className="font-serif text-xl font-bold text-neutral-950 mt-0.5">
+                <h3 className="font-serif text-lg sm:text-xl font-bold text-neutral-950 mt-0.5">
                   Complete ৳{pendingOrder.advanceDeliveryFee} Advance Payment
                 </h3>
               </div>
-              <span className="text-xs font-mono font-bold bg-neutral-100 px-2.5 py-1 rounded-md text-neutral-700">
-                {pendingOrder.orderNumber}
-              </span>
+              <div className="flex items-center space-x-2">
+                <span className="text-xs font-mono font-bold bg-neutral-100 px-2.5 py-1 rounded-md text-neutral-700">
+                  {pendingOrder.orderNumber}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setPendingOrder(null)}
+                  className="w-8 h-8 rounded-full bg-neutral-100 hover:bg-neutral-200 text-neutral-600 hover:text-neutral-950 flex items-center justify-center transition-colors cursor-pointer"
+                  title="Close and edit details"
+                  aria-label="Close modal"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
             </div>
 
-            {paymentError && (
-              <div className="mt-4 p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 shrink-0" />
-                <span>{paymentError}</span>
-              </div>
-            )}
+            {/* Scrollable Modal Content */}
+            <div className="overflow-y-auto p-5 sm:p-6 space-y-4 flex-1 touch-scroll">
+              {paymentError && (
+                <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{paymentError}</span>
+                </div>
+              )}
 
-            <div className="mt-4 space-y-4">
               <p className="text-xs text-neutral-600 leading-relaxed">
                 As per HYDEE policy, an advance payment of <strong>৳{pendingOrder.advanceDeliveryFee}</strong> is required to confirm order #{pendingOrder.orderNumber}. The remaining <strong>৳{pendingOrder.remainingCodAmount.toLocaleString()}</strong> is collected as cash on delivery.
               </p>
@@ -614,12 +644,19 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                 />
               </div>
 
-              <div className="pt-2 flex items-center space-x-3">
+              <div className="pt-2 flex flex-col sm:flex-row items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setPendingOrder(null)}
+                  className="w-full sm:w-auto px-5 py-3.5 border border-neutral-200 rounded-xl text-xs font-semibold text-neutral-600 hover:bg-neutral-100 transition-colors cursor-pointer text-center"
+                >
+                  Cancel / Edit Info
+                </button>
                 <button
                   type="button"
                   onClick={handleVerifyAdvancePayment}
                   disabled={isVerifyingPayment}
-                  className="flex-1 bg-[#800000] hover:bg-[#5c0000] text-white text-xs font-semibold tracking-wider py-4 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 disabled:bg-neutral-300 cursor-pointer"
+                  className="flex-1 w-full bg-[#800000] hover:bg-[#5c0000] text-white text-xs font-semibold tracking-wider py-3.5 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 disabled:bg-neutral-300 cursor-pointer"
                 >
                   {isVerifyingPayment ? (
                     <>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Search,
   CheckCircle2,
@@ -62,6 +62,20 @@ export const AdminOrders: React.FC = () => {
     setVerifyTrxId('');
     refreshOrders();
   };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (isVerifyModalOpen) {
+          setIsVerifyModalOpen(false);
+        } else if (selectedOrder) {
+          setSelectedOrder(null);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isVerifyModalOpen, selectedOrder]);
 
   // Helper to place a rapid sandbox test order for QA
   const handleCreateTestOrder = () => {
@@ -281,23 +295,33 @@ export const AdminOrders: React.FC = () => {
 
       {/* Order Detail Modal */}
       {selectedOrder && !isVerifyModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
-          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-8 shadow-2xl border border-neutral-200 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-4 border-b border-neutral-100">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-xs animate-in fade-in duration-200"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setSelectedOrder(null);
+          }}
+        >
+          <div className="bg-white rounded-2xl sm:rounded-3xl max-w-2xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-neutral-200 overflow-hidden relative">
+            <div className="sticky top-0 z-20 bg-white/95 backdrop-blur-md px-6 py-4 border-b border-neutral-100 flex items-center justify-between shrink-0">
               <div>
-                <span className="text-[10px] font-bold text-[#800000] tracking-widest uppercase">
+                <span className="text-[10px] font-bold text-[#800000] tracking-widest uppercase block">
                   ORDER DOSSIER
                 </span>
                 <h3 className="font-mono text-xl font-bold text-neutral-950">
                   {selectedOrder.orderNumber}
                 </h3>
               </div>
-              <button onClick={() => setSelectedOrder(null)} className="p-1 text-neutral-400 hover:text-neutral-900">
-                <X className="w-5 h-5" />
+              <button
+                type="button"
+                onClick={() => setSelectedOrder(null)}
+                className="w-8 h-8 rounded-full bg-neutral-100 hover:bg-neutral-200 text-neutral-600 hover:text-neutral-950 flex items-center justify-center transition-colors cursor-pointer"
+                aria-label="Close"
+              >
+                <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="mt-6 space-y-6 text-xs">
+            <div className="overflow-y-auto p-6 space-y-6 text-xs flex-1 touch-scroll">
               {/* Customer & Address */}
               <div className="grid grid-cols-2 gap-4 p-4 bg-neutral-50 rounded-xl">
                 <div>
@@ -414,22 +438,39 @@ export const AdminOrders: React.FC = () => {
 
       {/* Manual Verify Modal */}
       {isVerifyModalOpen && selectedOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-neutral-200">
-            <h3 className="font-serif text-lg font-bold text-neutral-950">
-              Manual Advance Verification: {selectedOrder.orderNumber}
-            </h3>
-            <p className="text-xs text-neutral-500 mt-1">
-              Verify customer deposit of ৳{selectedOrder.advanceDeliveryFee} to confirm booking and deduct inventory.
-            </p>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-xs animate-in fade-in duration-200"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setIsVerifyModalOpen(false);
+          }}
+        >
+          <div className="bg-white rounded-2xl sm:rounded-3xl max-w-md w-full max-h-[92vh] flex flex-col shadow-2xl border border-neutral-200 overflow-hidden relative">
+            <div className="sticky top-0 z-20 bg-white/95 backdrop-blur-md px-6 py-4 border-b border-neutral-100 flex items-center justify-between shrink-0">
+              <h3 className="font-serif text-lg font-bold text-neutral-950">
+                Verify Advance: {selectedOrder.orderNumber}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsVerifyModalOpen(false)}
+                className="w-8 h-8 rounded-full bg-neutral-100 hover:bg-neutral-200 text-neutral-600 hover:text-neutral-950 flex items-center justify-center transition-colors cursor-pointer"
+                aria-label="Close"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
 
-            {verifyError && (
-              <div className="mt-3 p-2.5 bg-red-50 text-red-700 text-xs rounded-xl">
-                {verifyError}
-              </div>
-            )}
+            <div className="overflow-y-auto p-6 space-y-4 text-xs flex-1 touch-scroll">
+              <p className="text-xs text-neutral-500">
+                Verify customer deposit of ৳{selectedOrder.advanceDeliveryFee} to confirm booking and deduct inventory.
+              </p>
 
-            <form onSubmit={handleManualVerifyPayment} className="mt-4 space-y-4 text-xs">
+              {verifyError && (
+                <div className="p-2.5 bg-red-50 text-red-700 text-xs rounded-xl">
+                  {verifyError}
+                </div>
+              )}
+
+              <form onSubmit={handleManualVerifyPayment} className="space-y-4">
               <div>
                 <label className="block font-semibold mb-1">Payment Method</label>
                 <select
@@ -474,7 +515,8 @@ export const AdminOrders: React.FC = () => {
             </form>
           </div>
         </div>
-      )}
-    </div>
-  );
+      </div>
+    )}
+  </div>
+);
 };

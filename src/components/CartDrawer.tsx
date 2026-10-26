@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { X, Plus, Minus, Trash2, ArrowRight, ShieldCheck } from 'lucide-react';
 import { CartItem } from '../types';
 
@@ -19,25 +19,35 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   onRemoveItem,
   onProceedToCheckout,
 }) => {
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isOpen) {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const estimatedAdvanceDeliveryFee = 80; // Standard Dhaka advance fee
 
   return (
-    <div className="fixed inset-0 z-50 overflow-hidden">
+    <div className="fixed inset-0 z-50 overflow-hidden animate-in fade-in duration-200">
       {/* Backdrop */}
       <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-xs transition-opacity"
+        className="absolute inset-0 bg-black/60 backdrop-blur-xs transition-opacity cursor-pointer"
         onClick={onClose}
       />
 
       <div className="fixed inset-y-0 right-0 max-w-md w-full flex">
         <div className="w-full bg-white shadow-2xl flex flex-col justify-between">
           {/* Drawer Header */}
-          <div className="p-6 border-b border-neutral-100 flex items-center justify-between">
+          <div className="p-5 sm:p-6 border-b border-neutral-100 flex items-center justify-between">
             <div className="flex items-center space-x-2">
-              <span className="font-serif text-xl font-bold text-neutral-950">
+              <span className="font-serif text-lg sm:text-xl font-bold text-neutral-950">
                 Your Shopping Bag
               </span>
               <span className="text-xs bg-neutral-100 text-neutral-600 px-2 py-0.5 rounded-full font-medium">
@@ -46,9 +56,10 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
             </div>
             <button
               onClick={onClose}
-              className="p-2 text-neutral-400 hover:text-neutral-900 transition-colors cursor-pointer"
+              className="w-8 h-8 rounded-full bg-neutral-100 hover:bg-neutral-200 text-neutral-600 hover:text-neutral-950 flex items-center justify-center transition-colors cursor-pointer"
+              aria-label="Close cart"
             >
-              <X className="w-5 h-5" />
+              <X className="w-4 h-4" />
             </button>
           </div>
 

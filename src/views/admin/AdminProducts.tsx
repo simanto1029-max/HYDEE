@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Plus,
   Edit2,
@@ -11,6 +11,11 @@ import {
   Sparkles,
   Layers,
   X,
+  Upload,
+  ArrowLeft,
+  ArrowRight,
+  Star,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { store } from '../../services/store';
 import { Product, ProductVariant, BundleTier } from '../../types';
@@ -44,6 +49,9 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ onNavigateToProduc
   const [formCare, setFormCare] = useState('');
   const [formOrigin, setFormOrigin] = useState('');
   const [formImages, setFormImages] = useState<string>('');
+  const [formImagesList, setFormImagesList] = useState<string[]>([]);
+  const [imageUrlInput, setImageUrlInput] = useState<string>('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [formTransparentImage, setFormTransparentImage] = useState('');
   const [formHas360, setFormHas360] = useState(false);
   const [formFrames360, setFormFrames360] = useState<string>('');
@@ -51,6 +59,17 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ onNavigateToProduc
   const [formIsFeatured, setFormIsFeatured] = useState(true);
   const [formIsHangerFeatured, setFormIsHangerFeatured] = useState(true);
   const [formVariants, setFormVariants] = useState<ProductVariant[]>([]);
+
+  // Close modal on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isModalOpen) {
+        setIsModalOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isModalOpen]);
 
   // Bundle Offer Tiers (Screenshot 3 Style)
   const [formBundleHeadline, setFormBundleHeadline] = useState('50% OFF TODAY ONLY');
@@ -63,38 +82,88 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ onNavigateToProduc
     setProducts(store.getProducts());
   };
 
+  // Image Upload & Reorder Helpers
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    files.forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        if (evt.target?.result) {
+          const resultUrl = evt.target.result as string;
+          setFormImagesList((prev) => [...prev, resultUrl]);
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+    if (e.target) e.target.value = '';
+  };
+
+  const handleAddImageUrl = () => {
+    const trimmed = imageUrlInput.trim();
+    if (!trimmed) return;
+    setFormImagesList((prev) => [...prev, trimmed]);
+    setImageUrlInput('');
+  };
+
+  const handleMoveImage = (index: number, direction: 'left' | 'right') => {
+    const targetIndex = direction === 'left' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= formImagesList.length) return;
+    setFormImagesList((prev) => {
+      const copy = [...prev];
+      const temp = copy[index];
+      copy[index] = copy[targetIndex];
+      copy[targetIndex] = temp;
+      return copy;
+    });
+  };
+
+  const handleSetAsThumbnail = (index: number) => {
+    if (index === 0) return;
+    setFormImagesList((prev) => {
+      const selected = prev[index];
+      const rest = prev.filter((_, i) => i !== index);
+      return [selected, ...rest];
+    });
+  };
+
+  const handleRemoveImage = (index: number) => {
+    setFormImagesList((prev) => prev.filter((_, i) => i !== index));
+  };
+
   const handleOpenCreate = () => {
     setEditingProduct(null);
     setFormName('');
     setFormSlug('');
     setFormSku(`HYD-${Date.now().toString().slice(-4)}`);
-    setFormCatSlug(categories[0]?.slug || 'shackets');
-    setFormPrice(8500);
-    setFormCompareAt(10500);
-    setFormCostPrice(3800);
-    setFormStock(15);
-    setFormDescription('Artisanal silhouette handcrafted from premium fibres.');
-    setFormFabric('80% Virgin Wool, 20% Cashmere-touch Polyamide');
-    setFormFit('Relaxed Tailored Silhouette');
+    setFormCatSlug(categories[0]?.slug || 'three-piece');
+    setFormPrice(16500);
+    setFormCompareAt(19500);
+    setFormCostPrice(7000);
+    setFormStock(10);
+    setFormDescription('Luxury in every fold. Specially designed for fancy gatherings and graceful evenings.');
+    setFormFabric('100% Pure Silk with intricate zardozi needlework');
+    setFormFit('Graceful Long Silhouette with Flared Palazzo');
     setFormCare('Specialist Dry Clean Only');
     setFormOrigin('Dhaka Atelier Studio');
-    setFormImages('https://images.unsplash.com/photo-1548883354-7622d03aca27?auto=format&fit=crop&w=1200&q=85');
-    setFormTransparentImage('https://images.unsplash.com/photo-1548883354-7622d03aca27?auto=format&fit=crop&w=800&q=85');
+    setFormImages('/images/editorial-glory-red.jpg');
+    setFormImagesList(['/images/editorial-glory-red.jpg']);
+    setFormTransparentImage('');
     setFormHas360(false);
     setFormFrames360('');
     setFormIsBestSeller(false);
     setFormIsFeatured(true);
     setFormIsHangerFeatured(true);
     setFormVariants([
-      { id: `v-${Date.now()}-38`, name: 'Size 38 / Signature', size: '38', color: 'Signature', sku: `HYD-38`, price: 8500, stock: 5 },
-      { id: `v-${Date.now()}-40`, name: 'Size 40 / Signature', size: '40', color: 'Signature', sku: `HYD-40`, price: 8500, stock: 6 },
-      { id: `v-${Date.now()}-42`, name: 'Size 42 / Signature', size: '42', color: 'Signature', sku: `HYD-42`, price: 8500, stock: 4 },
+      { id: `v-${Date.now()}-38`, name: 'Size 38 / Royal Crimson', size: '38', color: 'Royal Crimson', sku: `HYD-38`, price: 16500, stock: 4 },
+      { id: `v-${Date.now()}-40`, name: 'Size 40 / Royal Crimson', size: '40', color: 'Royal Crimson', sku: `HYD-40`, price: 16500, stock: 4 },
+      { id: `v-${Date.now()}-42`, name: 'Size 42 / Royal Crimson', size: '42', color: 'Royal Crimson', sku: `HYD-42`, price: 16500, stock: 2 },
     ]);
     setFormBundleHeadline('50% OFF TODAY ONLY');
-    setFormTier1Price(8500);
-    setFormTier2Price(15300);
+    setFormTier1Price(16500);
+    setFormTier2Price(29700);
     setFormTier2Badge('Most Popular');
-    setFormTier3Price(20400);
+    setFormTier3Price(39600);
     setIsModalOpen(true);
   };
 
@@ -114,6 +183,7 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ onNavigateToProduc
     setFormCare(p.specifications.care);
     setFormOrigin(p.specifications.origin);
     setFormImages(p.images.join('\n'));
+    setFormImagesList(p.images ? [...p.images] : []);
     setFormTransparentImage(p.transparentImage || '');
     setFormHas360(p.has360View ?? false);
     setFormFrames360((p.frames360 || []).join('\n'));
@@ -137,10 +207,12 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ onNavigateToProduc
     e.preventDefault();
     const cat = categories.find((c) => c.slug === formCatSlug);
 
-    const imagesArray = formImages
-      .split('\n')
-      .map((s) => s.trim())
-      .filter(Boolean);
+    const imagesArray = formImagesList.length > 0
+      ? formImagesList
+      : formImages
+          .split('\n')
+          .map((s) => s.trim())
+          .filter(Boolean);
 
     const framesArray = formFrames360
       .split('\n')
@@ -389,18 +461,29 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ onNavigateToProduc
 
       {/* Product Edit / Create Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs overflow-y-auto">
-          <div className="bg-white rounded-3xl max-w-3xl w-full p-6 sm:p-8 shadow-2xl border border-neutral-200 my-8">
-            <div className="flex items-center justify-between pb-4 border-b border-neutral-100">
-              <h3 className="font-serif text-xl font-bold text-neutral-950">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-xs animate-in fade-in duration-200"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setIsModalOpen(false);
+          }}
+        >
+          <div className="bg-white rounded-2xl sm:rounded-3xl max-w-3xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-neutral-200 overflow-hidden relative">
+            {/* Sticky Header with prominent close button */}
+            <div className="sticky top-0 z-30 bg-white/95 backdrop-blur-md px-6 py-4 border-b border-neutral-100 flex items-center justify-between shrink-0">
+              <h3 className="font-serif text-lg sm:text-xl font-bold text-neutral-950 truncate pr-4">
                 {editingProduct ? `Edit Piece: ${editingProduct.name}` : 'Create New Couture Piece'}
               </h3>
-              <button onClick={() => setIsModalOpen(false)} className="p-1 text-neutral-400 hover:text-neutral-900">
+              <button
+                type="button"
+                onClick={() => setIsModalOpen(false)}
+                className="w-9 h-9 rounded-full bg-neutral-100 hover:bg-neutral-200 text-neutral-600 hover:text-neutral-950 flex items-center justify-center transition-colors cursor-pointer shrink-0 shadow-xs"
+                aria-label="Close modal"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSaveProduct} className="mt-6 space-y-5 text-xs">
+            <form id="product-edit-form" onSubmit={handleSaveProduct} className="overflow-y-auto p-6 sm:p-8 space-y-6 text-xs flex-1 touch-scroll">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block font-semibold text-neutral-800 mb-1">Product Name *</label>
@@ -603,18 +686,149 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ onNavigateToProduc
                 </div>
               </div>
 
-              {/* Gallery Image URLs */}
-              <div>
-                <label className="block font-semibold text-neutral-800 mb-1">
-                  Product Image URLs (One URL per line)
-                </label>
-                <textarea
-                  rows={3}
-                  value={formImages}
-                  onChange={(e) => setFormImages(e.target.value)}
-                  placeholder="https://images.unsplash.com/..."
-                  className="w-full p-3 border border-neutral-200 rounded-xl focus:border-[#800000] focus:outline-hidden font-mono text-[11px]"
-                />
+              {/* Product Photos / Gallery Manager with File Upload and Thumbnail Reordering */}
+              <div className="p-4 sm:p-5 bg-neutral-50/80 rounded-2xl border border-neutral-200 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <div className="flex items-center space-x-2">
+                      <ImageIcon className="w-4 h-4 text-[#800000]" />
+                      <span className="font-bold text-neutral-950 text-sm">Product Photographs & Thumbnail Order</span>
+                    </div>
+                    <p className="text-[11px] text-neutral-500 mt-0.5">
+                      Upload photos from device. The <strong>1st photo</strong> is always the main catalog thumbnail. Use arrows or &quot;★ Set Cover&quot; to change which photo is first.
+                    </p>
+                  </div>
+                  
+                  {/* Upload Button */}
+                  <div>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      onChange={handleFileUpload}
+                      className="hidden"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-[#800000] hover:bg-[#660000] text-white font-bold text-xs px-4 py-2.5 rounded-xl transition-all shadow-sm cursor-pointer"
+                    >
+                      <Upload className="w-4 h-4" />
+                      <span>Upload From Device</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Add by Image URL input */}
+                <div className="flex items-center gap-2 pt-1">
+                  <input
+                    type="text"
+                    value={imageUrlInput}
+                    onChange={(e) => setImageUrlInput(e.target.value)}
+                    placeholder="Or paste an image URL / path here..."
+                    className="flex-1 p-2.5 border border-neutral-200 rounded-xl bg-white text-xs font-mono"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleAddImageUrl();
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddImageUrl}
+                    className="px-4 py-2.5 bg-neutral-900 hover:bg-neutral-800 text-white font-semibold rounded-xl text-xs cursor-pointer shrink-0"
+                  >
+                    Add URL
+                  </button>
+                </div>
+
+                {/* Visual Thumbnail Cards Grid */}
+                {formImagesList.length === 0 ? (
+                  <div
+                    onClick={() => fileInputRef.current?.click()}
+                    className="p-8 border-2 border-dashed border-neutral-300 hover:border-[#800000] rounded-2xl text-center cursor-pointer transition-colors bg-white/60"
+                  >
+                    <Upload className="w-8 h-8 text-neutral-400 mx-auto mb-2" />
+                    <p className="font-semibold text-neutral-700">No photos added yet</p>
+                    <p className="text-[11px] text-neutral-500 mt-0.5">Click here to upload photos from your phone or PC</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 pt-2">
+                    {formImagesList.map((img, idx) => {
+                      const isFirst = idx === 0;
+                      const isLast = idx === formImagesList.length - 1;
+                      return (
+                        <div
+                          key={idx}
+                          className={`relative rounded-xl border overflow-hidden bg-white shadow-xs group transition-all ${
+                            isFirst ? 'ring-2 ring-[#800000] border-transparent' : 'border-neutral-200'
+                          }`}
+                        >
+                          <div className="aspect-3/4 relative bg-neutral-100 overflow-hidden">
+                            <img
+                              src={img}
+                              alt={`Product photo ${idx + 1}`}
+                              className="w-full h-full object-cover"
+                            />
+                            {/* Main Thumbnail Badge on 1st Photo */}
+                            {isFirst ? (
+                              <div className="absolute top-2 left-2 bg-[#800000] text-white text-[9px] font-bold px-2 py-0.5 rounded-md shadow-md flex items-center gap-1">
+                                <Star className="w-3 h-3 fill-white" />
+                                <span>MAIN THUMBNAIL</span>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleSetAsThumbnail(idx)}
+                                className="absolute top-2 left-2 bg-black/70 hover:bg-[#800000] text-white text-[9px] font-semibold px-2 py-0.5 rounded-md backdrop-blur-xs transition-colors cursor-pointer"
+                                title="Make this the first/main thumbnail"
+                              >
+                                ★ Set Cover
+                              </button>
+                            )}
+
+                            {/* Delete Button */}
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveImage(idx)}
+                              className="absolute top-2 right-2 w-6 h-6 rounded-full bg-black/60 hover:bg-red-600 text-white flex items-center justify-center transition-colors cursor-pointer"
+                              title="Delete photo"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+
+                          {/* Reorder / Swipe Controls */}
+                          <div className="p-1.5 bg-neutral-50 border-t border-neutral-100 flex items-center justify-between text-[11px]">
+                            <button
+                              type="button"
+                              disabled={isFirst}
+                              onClick={() => handleMoveImage(idx, 'left')}
+                              className="p-1 rounded-md text-neutral-600 hover:text-neutral-900 hover:bg-neutral-200 disabled:opacity-25 disabled:cursor-not-allowed cursor-pointer"
+                              title="Move photo earlier"
+                            >
+                              <ArrowLeft className="w-3.5 h-3.5" />
+                            </button>
+                            <span className="font-mono text-[10px] text-neutral-400 font-bold">
+                              {idx + 1} of {formImagesList.length}
+                            </span>
+                            <button
+                              type="button"
+                              disabled={isLast}
+                              onClick={() => handleMoveImage(idx, 'right')}
+                              className="p-1 rounded-md text-neutral-600 hover:text-neutral-900 hover:bg-neutral-200 disabled:opacity-25 disabled:cursor-not-allowed cursor-pointer"
+                              title="Move photo later"
+                            >
+                              <ArrowRight className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               {/* Transparent image for Fashion Hanger */}
@@ -687,24 +901,25 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ onNavigateToProduc
                   <span className="font-semibold text-neutral-800">Display on MOVE & SLIDE Hanger Rail</span>
                 </label>
               </div>
-
-              {/* Submit Buttons */}
-              <div className="pt-4 border-t border-neutral-100 flex justify-end space-x-3">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-5 py-3 rounded-xl border border-neutral-200 text-neutral-700 hover:bg-neutral-50 font-semibold"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-6 py-3 rounded-xl bg-[#800000] hover:bg-[#5c0000] text-white font-semibold uppercase tracking-wider"
-                >
-                  Save Piece
-                </button>
-              </div>
             </form>
+
+            {/* Sticky Modal Footer (Always visible regardless of scroll height) */}
+            <div className="sticky bottom-0 z-30 bg-white/95 backdrop-blur-md px-6 py-4 border-t border-neutral-100 flex items-center justify-end space-x-3 shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsModalOpen(false)}
+                className="px-5 py-2.5 rounded-full border border-neutral-200 text-neutral-700 hover:bg-neutral-50 font-semibold cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                form="product-edit-form"
+                className="px-6 py-2.5 rounded-full bg-[#800000] hover:bg-[#5c0000] text-white font-bold uppercase tracking-wider transition-all shadow-md cursor-pointer"
+              >
+                Save Piece
+              </button>
+            </div>
           </div>
         </div>
       )}

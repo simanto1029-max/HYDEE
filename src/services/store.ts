@@ -545,12 +545,17 @@ class StoreService {
 
   // Payment Verification Callback (Only marks confirmed when verified)
   verifyAdvancePayment(
-    orderNumber: string,
+    orderNumberOrId: string,
     method: 'bkash' | 'nagad' | 'rocket' | 'card' | 'manual_deposit',
     transactionId: string,
     verifiedBy: string = 'Payment Gateway Callback'
   ): { success: boolean; order?: Order; error?: string } {
-    const order = this.getOrderByNumber(orderNumber);
+    const cleanQuery = orderNumberOrId ? orderNumberOrId.trim().toUpperCase() : '';
+    const order = this.orders.find(
+      (o) =>
+        o.id === orderNumberOrId ||
+        (cleanQuery && o.orderNumber.trim().toUpperCase() === cleanQuery)
+    );
     if (!order) return { success: false, error: 'Order not found.' };
 
     if (order.paymentStatus === 'ADVANCE_VERIFIED') {
