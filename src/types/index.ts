@@ -140,6 +140,8 @@ export interface Order {
   remainingCodAmount: number; // Total - Advance paid
   status: OrderStatus;
   paymentStatus: PaymentStatus;
+  paymentType?: 'advance_cod' | 'full_prepaid';
+  isFullPayment?: boolean;
   advancePaymentMethod?: 'bkash' | 'nagad' | 'rocket' | 'card' | 'manual_deposit';
   transactionId?: string;
   verifiedAt?: string;

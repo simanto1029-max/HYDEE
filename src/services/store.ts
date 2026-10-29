@@ -454,6 +454,7 @@ class StoreService {
     items: CartItem[];
     discountCode?: string;
     isTestOrder?: boolean;
+    paymentType?: 'advance_cod' | 'full_prepaid';
   }): { success: boolean; order?: Order; error?: string } {
     // 1. Validate inputs
     if (!payload.customerName.trim()) return { success: false, error: 'Full name is required.' };
@@ -510,7 +511,8 @@ class StoreService {
 
     const advanceDeliveryFee = zone.advanceFee;
     const totalAmount = Math.max(0, subtotal + advanceDeliveryFee - discountAmount);
-    const remainingCodAmount = totalAmount - advanceDeliveryFee;
+    const isFullPayment = payload.paymentType === 'full_prepaid';
+    const remainingCodAmount = isFullPayment ? 0 : totalAmount - advanceDeliveryFee;
 
     const orderNumber = `HYD-2026-${Math.floor(1000 + Math.random() * 9000)}`;
     const now = new Date().toISOString();
@@ -533,6 +535,8 @@ class StoreService {
       discountCode: payload.discountCode,
       totalAmount,
       remainingCodAmount,
+      paymentType: payload.paymentType || 'advance_cod',
+      isFullPayment,
       status: 'PENDING_ADVANCE',
       paymentStatus: 'UNPAID',
       isTestOrder: Boolean(payload.isTestOrder),
@@ -543,7 +547,9 @@ class StoreService {
         {
           timestamp: now,
           status: 'ORDER_INITIATED',
-          note: `Order initiated. Required advance delivery payment: ৳${advanceDeliveryFee}`,
+          note: isFullPayment
+            ? `Full prepayment order initiated. Amount due: ৳${totalAmount.toLocaleString()}`
+            : `Cash on Delivery order initiated. Required advance courier fee: ৳${advanceDeliveryFee}`,
           actor: 'Customer',
         },
       ],
@@ -593,7 +599,11 @@ class StoreService {
 
     const now = new Date().toISOString();
     order.status = 'CONFIRMED';
-    order.paymentStatus = 'ADVANCE_VERIFIED';
+    const isFull = Boolean(order.isFullPayment || order.paymentType === 'full_prepaid');
+    order.paymentStatus = isFull ? 'FULLY_PAID' : 'ADVANCE_VERIFIED';
+    if (isFull) {
+      order.remainingCodAmount = 0;
+    }
     order.advancePaymentMethod = method;
     order.transactionId = transactionId.trim().toUpperCase();
     order.verifiedAt = now;
@@ -601,14 +611,18 @@ class StoreService {
 
     order.timeline.push({
       timestamp: now,
-      status: 'ADVANCE_PAID_CONFIRMED',
-      note: `Verified advance delivery payment of ৳${order.advanceDeliveryFee} via ${method.toUpperCase()} (TrxID: ${order.transactionId}). COD balance due on delivery: ৳${order.remainingCodAmount}`,
+      status: isFull ? 'FULL_PAYMENT_CONFIRMED' : 'ADVANCE_PAID_CONFIRMED',
+      note: isFull
+        ? `Verified 100% full order prepayment of ৳${order.totalAmount.toLocaleString()} via ${method.toUpperCase()} (TrxID: ${order.transactionId}). No cash on delivery due (৳0).`
+        : `Verified advance delivery payment of ৳${order.advanceDeliveryFee} via ${method.toUpperCase()} (TrxID: ${order.transactionId}). COD balance due on delivery: ৳${order.remainingCodAmount.toLocaleString()}`,
       actor: verifiedBy,
     });
 
     this.logAudit(
       'Verify Advance Payment',
-      `Confirmed advance ৳${order.advanceDeliveryFee} for order ${order.orderNumber} (TrxID: ${order.transactionId})`
+      isFull
+        ? `Confirmed full payment ৳${order.totalAmount.toLocaleString()} for order ${order.orderNumber} (TrxID: ${order.transactionId})`
+        : `Confirmed advance ৳${order.advanceDeliveryFee} for order ${order.orderNumber} (TrxID: ${order.transactionId})`
     );
 
     this.persist();
