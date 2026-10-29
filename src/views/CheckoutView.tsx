@@ -1,17 +1,27 @@
 import React, { useState, useEffect } from 'react';
 import {
-  ShieldCheck,
-  Truck,
+  ChevronLeft,
+  User,
+  Phone,
+  Mail,
+  MapPin,
   CheckCircle2,
   AlertCircle,
-  ArrowRight,
   Loader2,
   Tag,
   X,
+  Banknote,
+  CreditCard,
+  Copy,
+  Check,
+  Plus,
+  Minus,
+  ShieldCheck,
+  Sparkles,
 } from 'lucide-react';
 import { store } from '../services/store';
 import { metaPixel } from '../services/metaPixel';
-import { CartItem, DeliveryZone, Order } from '../types';
+import { CartItem, Order } from '../types';
 
 interface CheckoutViewProps {
   items: CartItem[];
@@ -22,58 +32,113 @@ interface CheckoutViewProps {
 }
 
 export const CheckoutView: React.FC<CheckoutViewProps> = ({
-  items,
+  items: initialItems,
   directBuyItem,
   onNavigate,
   onOrderConfirmed,
   onClearCart,
 }) => {
-  // If user clicked Buy Now directly, use that item; otherwise use items in cart
-  const checkoutItems = directBuyItem ? [directBuyItem] : items;
+  // Local checkout items state for real-time quantity adjustments
+  const [localDirectItem, setLocalDirectItem] = useState<CartItem | null>(directBuyItem || null);
+  const [cartItemsState, setCartItemsState] = useState<CartItem[]>(
+    directBuyItem ? [directBuyItem] : initialItems.length > 0 ? initialItems : store.getCart()
+  );
 
+  const checkoutItems = localDirectItem ? [localDirectItem] : cartItemsState;
+
+  // Delivery Zones
   const zones = store.getDeliveryZones();
   const [selectedZoneId, setSelectedZoneId] = useState<string>(zones[0]?.id || 'zone-dhaka');
   const selectedZone = zones.find((z) => z.id === selectedZoneId) || zones[0];
 
-  // Customer form fields
-  const [name, setName] = useState('');
+  // Recipient form inputs (matching reference design split fields)
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
-  const [address, setAddress] = useState('');
+  const [deliveryAddress, setDeliveryAddress] = useState('');
   const [district, setDistrict] = useState('Dhaka');
-  const [notes, setNotes] = useState('');
+  const [deliveryNotes, setDeliveryNotes] = useState('');
+
+  // Selected Payment Method
+  // 'cod' | 'card' | 'bkash' | 'nagad'
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<'cod' | 'card' | 'bkash' | 'nagad'>('cod');
+  const [inlineTrxId, setInlineTrxId] = useState('');
+  const [copiedNumber, setCopiedNumber] = useState(false);
+
+  // Promo code states
   const [discountCode, setDiscountCode] = useState('');
   const [appliedDiscount, setAppliedDiscount] = useState<string | null>(null);
   const [discountAmount, setDiscountAmount] = useState(0);
 
-  // Flow states
+  // Submission & verification modal states
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [pendingOrder, setPendingOrder] = useState<Order | null>(null);
-
-  // Advance Payment Modal states
-  const [paymentMethod, setPaymentMethod] = useState<'bkash' | 'nagad' | 'rocket' | 'card' | 'manual_deposit'>('bkash');
-  const [transactionId, setTransactionId] = useState('');
+  const [modalTrxId, setModalTrxId] = useState('');
   const [isVerifyingPayment, setIsVerifyingPayment] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
 
   // Calculations
   const subtotal = checkoutItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const totalItemCount = checkoutItems.reduce((sum, item) => sum + item.quantity, 0);
   const advanceDeliveryFee = selectedZone ? selectedZone.advanceFee : 80;
   const totalAmount = Math.max(0, subtotal + advanceDeliveryFee - discountAmount);
   const remainingCodAmount = totalAmount - advanceDeliveryFee;
 
-  // Track InitiateCheckout
+  // Track InitiateCheckout on mount
   useEffect(() => {
     if (checkoutItems.length > 0) {
       metaPixel.track('InitiateCheckout', {
-        num_items: checkoutItems.reduce((acc, i) => acc + i.quantity, 0),
+        num_items: totalItemCount,
         value: subtotal,
         currency: 'BDT',
       });
     }
   }, []);
 
+  // Sync cart items when prop changes
+  useEffect(() => {
+    if (!directBuyItem) {
+      setCartItemsState(initialItems.length > 0 ? initialItems : store.getCart());
+    }
+  }, [initialItems, directBuyItem]);
+
+  // Escape key handler for modal
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && pendingOrder) {
+        setPendingOrder(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [pendingOrder]);
+
+  // Adjust item quantity directly in checkout
+  const handleUpdateItemQuantity = (item: CartItem, delta: number) => {
+    const newQty = item.quantity + delta;
+    if (newQty <= 0) return;
+
+    if (localDirectItem) {
+      setLocalDirectItem({
+        ...localDirectItem,
+        quantity: Math.min(newQty, localDirectItem.maxStock || 10),
+      });
+    } else {
+      store.updateCartQuantity(item.productId, item.variantId, newQty);
+      setCartItemsState(store.getCart());
+    }
+  };
+
+  // Copy Merchant / Personal bKash number
+  const handleCopyMerchantNumber = (num: string) => {
+    navigator.clipboard.writeText(num);
+    setCopiedNumber(true);
+    setTimeout(() => setCopiedNumber(false), 2000);
+  };
+
+  // Promo code apply
   const handleApplyPromo = () => {
     setError(null);
     const code = discountCode.trim().toUpperCase();
@@ -92,35 +157,42 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
     }
   };
 
-  // Step 1: Customer submits order details to create PENDING order
-  const handleInitiateOrder = (e: React.FormEvent) => {
+  const handleRemovePromo = () => {
+    setAppliedDiscount(null);
+    setDiscountAmount(0);
+    setDiscountCode('');
+  };
+
+  // Form submission: Create order & proceed to verification
+  const handleSubmitCheckout = (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
-    if (!name.trim()) {
-      setError('Please enter your full name.');
+    const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
+    if (!fullName) {
+      setError('Please provide your full name.');
       return;
     }
     const cleanPhone = phone.trim();
     if (!cleanPhone.match(/^01[3-9]\d{8}$/)) {
-      setError('Please provide a valid 11-digit Bangladesh phone number (01xxxxxxxxx).');
+      setError('Please provide a valid 11-digit Bangladesh mobile number (e.g. 017xxxxxxxx).');
       return;
     }
-    if (!address.trim()) {
-      setError('Please provide your detailed delivery address.');
+    if (!deliveryAddress.trim()) {
+      setError('Please provide your delivery address (House / Road / Area).');
       return;
     }
 
     setIsSubmitting(true);
 
     const result = store.createOrder({
-      customerName: name.trim(),
+      customerName: fullName,
       customerPhone: cleanPhone,
       customerEmail: email.trim() || undefined,
-      deliveryAddress: address.trim(),
-      district: district.trim(),
+      deliveryAddress: deliveryAddress.trim(),
+      district: district.trim() || (selectedZone.name.includes('Inside') ? 'Dhaka' : 'Outside Dhaka'),
       zoneId: selectedZone.id,
-      notes: notes.trim() || undefined,
+      notes: deliveryNotes.trim() || undefined,
       items: checkoutItems,
       discountCode: appliedDiscount || undefined,
       isTestOrder: false,
@@ -129,30 +201,49 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
     setIsSubmitting(false);
 
     if (!result.success || !result.order) {
-      setError(result.error || 'Failed to initialize booking.');
+      setError(result.error || 'Failed to place booking.');
       return;
     }
 
-    setPendingOrder(result.order);
+    const createdOrder = result.order;
+
+    // If user already typed TrxID inline in the checkout page
+    if (inlineTrxId.trim() && inlineTrxId.trim().length >= 6) {
+      const mappedMethod =
+        selectedPaymentMethod === 'bkash'
+          ? 'bkash'
+          : selectedPaymentMethod === 'nagad'
+          ? 'nagad'
+          : selectedPaymentMethod === 'card'
+          ? 'card'
+          : 'bkash';
+
+      const verifyResult = store.verifyAdvancePayment(
+        createdOrder.orderNumber,
+        mappedMethod,
+        inlineTrxId.trim().toUpperCase(),
+        `${mappedMethod.toUpperCase()} Direct Checkout Verification`
+      );
+
+      if (verifyResult.success && verifyResult.order) {
+        if (!directBuyItem) onClearCart();
+        onOrderConfirmed(verifyResult.order);
+        onNavigate(`/thank-you?order=${verifyResult.order.orderNumber}`);
+        return;
+      }
+    }
+
+    // Otherwise, open the verification modal with pre-selected method
+    setPendingOrder(createdOrder);
+    setModalTrxId(inlineTrxId.trim());
   };
 
-  // Escape key handler for advance payment modal
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && pendingOrder) {
-        setPendingOrder(null);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [pendingOrder]);
-
-  // Step 2: Customer pays advance delivery fee
-  const handleVerifyAdvancePayment = () => {
+  // Verify advance payment inside modal
+  const handleVerifyModalPayment = () => {
     if (!pendingOrder) return;
     setPaymentError(null);
 
-    const cleanTrx = transactionId.trim().toUpperCase();
+    const cleanTrx = modalTrxId.trim().toUpperCase();
     if (!cleanTrx || cleanTrx.length < 6) {
       setPaymentError('Please enter a valid Transaction ID (at least 6 characters).');
       return;
@@ -161,11 +252,20 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
     setIsVerifyingPayment(true);
 
     setTimeout(() => {
+      const mappedMethod =
+        selectedPaymentMethod === 'bkash'
+          ? 'bkash'
+          : selectedPaymentMethod === 'nagad'
+          ? 'nagad'
+          : selectedPaymentMethod === 'card'
+          ? 'card'
+          : 'bkash';
+
       const verifyResult = store.verifyAdvancePayment(
         pendingOrder.orderNumber,
-        paymentMethod,
+        mappedMethod,
         cleanTrx,
-        `${paymentMethod.toUpperCase()} Gateway Callback (Verified)`
+        `${mappedMethod.toUpperCase()} Gateway Callback (Verified)`
       );
 
       setIsVerifyingPayment(false);
@@ -175,31 +275,35 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
         return;
       }
 
-      // Clear cart
       if (!directBuyItem) {
         onClearCart();
       }
 
       onOrderConfirmed(verifyResult.order);
       onNavigate(`/thank-you?order=${verifyResult.order.orderNumber}`);
-    }, 1200);
+    }, 900);
   };
 
-  // Test sandbox autofill helper
+  // Test sandbox TRX fill
   const handleSimulateSandboxSuccess = () => {
-    setTransactionId(`TRX-TEST-${Math.floor(100000 + Math.random() * 900000)}`);
+    const randomTrx = `TRX-QA-${Math.floor(100000 + Math.random() * 900000)}`;
+    setModalTrxId(randomTrx);
+    setInlineTrxId(randomTrx);
   };
 
   if (checkoutItems.length === 0 && !pendingOrder) {
     return (
       <div className="py-24 text-center max-w-md mx-auto px-6">
+        <div className="w-16 h-16 rounded-full bg-neutral-100 flex items-center justify-center mx-auto text-neutral-400 mb-4">
+          <Banknote className="w-8 h-8" />
+        </div>
         <h2 className="font-serif text-2xl font-bold text-neutral-900">Your Bag Is Empty</h2>
         <p className="text-xs text-neutral-500 mt-2">
-          Please select a couture piece before proceeding to checkout.
+          Please explore our couture collection before proceeding to checkout.
         </p>
         <button
           onClick={() => onNavigate('/products')}
-          className="mt-6 bg-[#800000] text-white text-xs font-semibold px-6 py-3 rounded-full cursor-pointer"
+          className="mt-6 bg-[#800000] text-white text-xs font-semibold px-6 py-3 rounded-full cursor-pointer hover:bg-[#600000] transition-colors"
         >
           Explore Collection
         </button>
@@ -208,95 +312,165 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
   }
 
   return (
-    <div className="py-12 sm:py-16 bg-[#fcfcfc]">
-      <div className="max-w-7xl mx-auto px-6 sm:px-10">
-        <div className="mb-8">
-          <span className="text-[11px] font-bold tracking-[0.2em] text-[#800000] uppercase block mb-1">
-            Secure Atelier Dispatch
-          </span>
-          <h1 className="font-serif text-3xl font-bold text-neutral-950">
-            Cash On Delivery Booking
-          </h1>
-          <p className="text-xs text-neutral-500 mt-1">
-            Pay advance delivery charge now to book · Remaining ৳{remainingCodAmount.toLocaleString()} paid in cash at delivery.
-          </p>
+    <div className="bg-[#FFFFFF] min-h-screen py-8 sm:py-12 text-neutral-900 font-sans">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+        
+        {/* Top Back Navigation Breadcrumb (Matching Image 2) */}
+        <div className="mb-6">
+          <button
+            type="button"
+            onClick={() => onNavigate('/products')}
+            className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-semibold text-neutral-800 hover:text-[#800000] transition-colors cursor-pointer"
+          >
+            <ChevronLeft className="w-4 h-4 text-neutral-600" />
+            <span>Home / Products</span>
+          </button>
+        </div>
+
+        {/* Stepper Tabs (Matching Image 2) */}
+        <div className="border-b border-neutral-200 mb-8 sm:mb-10">
+          <div className="flex items-center gap-8 text-xs sm:text-sm font-semibold">
+            {/* Step 1: Customer Information */}
+            <div className="flex items-center gap-2 pb-3 border-b-2 border-neutral-900 text-neutral-900 cursor-pointer">
+              <span className="w-5 h-5 rounded-full bg-neutral-500 text-white flex items-center justify-center text-[10px]">
+                ✓
+              </span>
+              <span>Customer Information</span>
+            </div>
+
+            {/* Step 2: Payment Details */}
+            <div className="flex items-center gap-2 pb-3 text-neutral-400 border-b-2 border-transparent">
+              <span className="w-5 h-5 rounded-full bg-neutral-200 text-neutral-500 flex items-center justify-center text-[10px]">
+                ✓
+              </span>
+              <span>Payment Details</span>
+            </div>
+          </div>
         </div>
 
         {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl flex items-center gap-2">
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-700 text-xs rounded-2xl flex items-center gap-2 shadow-xs">
             <AlertCircle className="w-4 h-4 shrink-0" />
             <span>{error}</span>
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-start">
+        {/* 2-Column Grid (Matching Image 2) */}
+        <form onSubmit={handleSubmitCheckout} className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-start">
           
-          {/* Left Form: Delivery Information */}
-          <div className="lg:col-span-7 bg-white rounded-2xl border border-neutral-200/80 p-6 sm:p-8 shadow-xs">
-            <form onSubmit={handleInitiateOrder} className="space-y-6">
-              
-              <div>
-                <h3 className="font-serif text-lg font-bold text-neutral-950 pb-2 border-b border-neutral-100">
-                  Recipient Information
-                </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-neutral-700 mb-1.5">
-                      Full Name *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g. Tanvir Ahmed"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      className="w-full text-xs p-3.5 border border-neutral-200 rounded-xl focus:border-[#800000] focus:outline-hidden"
-                    />
+          {/* LEFT COLUMN: Customer Information & Payment Method */}
+          <div className="lg:col-span-7 space-y-8">
+            
+            {/* Section 1: Check Out Your Items */}
+            <div>
+              <h2 className="text-xl sm:text-2xl font-bold text-neutral-950 tracking-tight">
+                Check Out Your Items
+              </h2>
+              <p className="text-xs text-neutral-500 mt-1 mb-5">
+                For a better experience, check your item and choose your shipping before ordering.
+              </p>
+
+              <div className="space-y-3.5">
+                {/* First Name & Last Name Split Row (Matching Image 2) */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  {/* First Name */}
+                  <div className="border border-neutral-250 rounded-xl p-3 bg-white focus-within:border-neutral-900 focus-within:ring-1 focus-within:ring-neutral-900 transition-all flex items-start gap-2.5">
+                    <User className="w-4 h-4 text-neutral-400 mt-0.5 shrink-0" />
+                    <div className="flex-1">
+                      <label className="block text-[10px] uppercase font-semibold text-neutral-400 tracking-wider">
+                        First Name *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="Mohammad"
+                        value={firstName}
+                        onChange={(e) => setFirstName(e.target.value)}
+                        className="w-full text-xs sm:text-sm font-semibold text-neutral-900 focus:outline-hidden bg-transparent placeholder:text-neutral-300 mt-0.5"
+                      />
+                    </div>
                   </div>
 
-                  <div>
-                    <label className="block text-xs font-semibold text-neutral-700 mb-1.5">
-                      Bangladesh Mobile Number *
-                    </label>
-                    <input
-                      type="tel"
-                      required
-                      placeholder="017xxxxxxxx"
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                      className="w-full text-xs p-3.5 border border-neutral-200 rounded-xl focus:border-[#800000] focus:outline-hidden"
-                    />
-                    <span className="text-[10px] text-neutral-400 mt-1 block">
-                      Must be 11 digits starting with 01
-                    </span>
+                  {/* Last Name */}
+                  <div className="border border-neutral-250 rounded-xl p-3 bg-white focus-within:border-neutral-900 focus-within:ring-1 focus-within:ring-neutral-900 transition-all flex items-start gap-2.5">
+                    <User className="w-4 h-4 text-neutral-400 mt-0.5 shrink-0" />
+                    <div className="flex-1">
+                      <label className="block text-[10px] uppercase font-semibold text-neutral-400 tracking-wider">
+                        Last Name
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Abdullah"
+                        value={lastName}
+                        onChange={(e) => setLastName(e.target.value)}
+                        className="w-full text-xs sm:text-sm font-semibold text-neutral-900 focus:outline-hidden bg-transparent placeholder:text-neutral-300 mt-0.5"
+                      />
+                    </div>
                   </div>
                 </div>
 
-                <div className="mt-4">
-                  <label className="block text-xs font-semibold text-neutral-700 mb-1.5">
-                    Email Address (For Order Tracking & Invoice)
-                  </label>
-                  <input
-                    type="email"
-                    placeholder="tanvir@example.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="w-full text-xs p-3.5 border border-neutral-200 rounded-xl focus:border-[#800000] focus:outline-hidden"
-                  />
+                {/* Mobile Number & Email Row */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  {/* Mobile Number */}
+                  <div className="border border-neutral-250 rounded-xl p-3 bg-white focus-within:border-neutral-900 focus-within:ring-1 focus-within:ring-neutral-900 transition-all flex items-start gap-2.5">
+                    <Phone className="w-4 h-4 text-neutral-400 mt-0.5 shrink-0" />
+                    <div className="flex-1">
+                      <label className="block text-[10px] uppercase font-semibold text-neutral-400 tracking-wider">
+                        Mobile Number (11 Digits) *
+                      </label>
+                      <input
+                        type="tel"
+                        required
+                        placeholder="017xxxxxxxx"
+                        value={phone}
+                        onChange={(e) => setPhone(e.target.value)}
+                        className="w-full text-xs sm:text-sm font-mono font-semibold text-neutral-900 focus:outline-hidden bg-transparent placeholder:text-neutral-300 mt-0.5"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Email */}
+                  <div className="border border-neutral-250 rounded-xl p-3 bg-white focus-within:border-neutral-900 focus-within:ring-1 focus-within:ring-neutral-900 transition-all flex items-start gap-2.5">
+                    <Mail className="w-4 h-4 text-neutral-400 mt-0.5 shrink-0" />
+                    <div className="flex-1">
+                      <label className="block text-[10px] uppercase font-semibold text-neutral-400 tracking-wider">
+                        Email Address (Optional)
+                      </label>
+                      <input
+                        type="email"
+                        placeholder="name@example.com"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        className="w-full text-xs sm:text-sm font-semibold text-neutral-900 focus:outline-hidden bg-transparent placeholder:text-neutral-300 mt-0.5"
+                      />
+                    </div>
+                  </div>
                 </div>
-              </div>
 
-              <div>
-                <h3 className="font-serif text-lg font-bold text-neutral-950 pb-2 border-b border-neutral-100">
-                  Delivery Destination
-                </h3>
+                {/* Delivery Address Box (Matching Image 2) */}
+                <div className="border border-neutral-250 rounded-xl p-3.5 bg-white focus-within:border-neutral-900 focus-within:ring-1 focus-within:ring-neutral-900 transition-all flex items-start gap-2.5">
+                  <MapPin className="w-4 h-4 text-neutral-400 mt-0.5 shrink-0" />
+                  <div className="flex-1">
+                    <label className="block text-[10px] uppercase font-semibold text-neutral-400 tracking-wider">
+                      Delivery Address *
+                    </label>
+                    <textarea
+                      rows={2}
+                      required
+                      placeholder="e.g. Al, Helal 36, Noyasark, Sylhet -3100 (House / Road / Area)"
+                      value={deliveryAddress}
+                      onChange={(e) => setDeliveryAddress(e.target.value)}
+                      className="w-full text-xs sm:text-sm font-medium text-neutral-900 focus:outline-hidden bg-transparent placeholder:text-neutral-300 mt-0.5 resize-none"
+                    />
+                  </div>
+                </div>
 
-                {/* Delivery Zone Selector */}
-                <div className="mt-4 space-y-2">
-                  <label className="block text-xs font-semibold text-neutral-700 mb-1">
-                    Select Delivery Zone & Advance Charge *
-                  </label>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {/* Shipping Zone Selector Cards */}
+                <div className="pt-1">
+                  <span className="block text-[10px] uppercase font-semibold text-neutral-400 tracking-wider mb-2">
+                    Shipping Region & Advance Delivery Charge *
+                  </span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {zones.map((zone) => {
                       const isSelected = selectedZoneId === zone.id;
                       return (
@@ -308,212 +482,402 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                           }}
                           className={`p-3.5 rounded-xl border cursor-pointer transition-all ${
                             isSelected
-                              ? 'border-[#800000] bg-rose-50/30 ring-1 ring-[#800000]'
+                              ? 'border-2 border-neutral-900 bg-neutral-50/60 shadow-xs'
                               : 'border-neutral-200 bg-white hover:border-neutral-300'
                           }`}
                         >
                           <div className="flex justify-between items-center text-xs">
                             <span className="font-bold text-neutral-900">{zone.name}</span>
+                            <span className="font-sans font-bold text-neutral-950 tabular-nums">
+                              ৳{zone.advanceFee}
+                            </span>
                           </div>
-                          <p className="text-xs font-bold text-[#800000] mt-1">
-                            ৳{zone.advanceFee} Advance
-                          </p>
-                          <span className="text-[10px] text-neutral-500 block mt-0.5">
-                            {zone.estimatedDays}
+                          <span className="text-[11px] text-neutral-500 block mt-1">
+                            {zone.estimatedDays} · Advance Deposit
                           </span>
                         </div>
                       );
                     })}
                   </div>
                 </div>
+              </div>
+            </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-neutral-700 mb-1.5">
-                      District *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g. Dhaka / Chittagong / Sylhet"
-                      value={district}
-                      onChange={(e) => setDistrict(e.target.value)}
-                      className="w-full text-xs p-3.5 border border-neutral-200 rounded-xl focus:border-[#800000] focus:outline-hidden"
-                    />
+            {/* Section 2: Payment Method (Matching Image 2) */}
+            <div className="pt-2">
+              <h2 className="text-xl sm:text-2xl font-bold text-neutral-950 tracking-tight">
+                Payment Method
+              </h2>
+              <p className="text-xs text-neutral-500 mt-1 mb-4">
+                Select the bank or gateway for payment of your order.
+              </p>
+
+              <div className="space-y-3">
+                
+                {/* 1. Cash on Delivery (Advance Paid) */}
+                <div
+                  onClick={() => setSelectedPaymentMethod('cod')}
+                  className={`border rounded-xl p-3.5 flex items-center justify-between cursor-pointer transition-all ${
+                    selectedPaymentMethod === 'cod'
+                      ? 'border-2 border-neutral-900 bg-neutral-50/50 shadow-xs'
+                      : 'border-neutral-200 bg-white hover:border-neutral-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-neutral-100 flex items-center justify-center text-neutral-700 shrink-0">
+                      <Banknote className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <span className="text-xs sm:text-sm font-bold text-neutral-900 block">
+                        Cash on Delivery
+                      </span>
+                      <span className="text-[11px] text-neutral-500 block">
+                        Pay advance delivery fee (৳{advanceDeliveryFee}) now · Remaining ৳{remainingCodAmount.toLocaleString()} upon delivery
+                      </span>
+                    </div>
                   </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-neutral-700 mb-1.5">
-                      House / Flat / Road / Area *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g. House 42, Road 11, Banani"
-                      value={address}
-                      onChange={(e) => setAddress(e.target.value)}
-                      className="w-full text-xs p-3.5 border border-neutral-200 rounded-xl focus:border-[#800000] focus:outline-hidden"
-                    />
+                  <div
+                    className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                      selectedPaymentMethod === 'cod'
+                        ? 'border-neutral-900 bg-neutral-900'
+                        : 'border-neutral-300'
+                    }`}
+                  >
+                    {selectedPaymentMethod === 'cod' && (
+                      <div className="w-2 h-2 rounded-full bg-white" />
+                    )}
                   </div>
                 </div>
 
-                <div className="mt-4">
-                  <label className="block text-xs font-semibold text-neutral-700 mb-1.5">
-                    Special Delivery Instructions (Optional)
-                  </label>
-                  <textarea
-                    rows={2}
-                    placeholder="e.g. Call before delivery, ring second floor bell"
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    className="w-full text-xs p-3.5 border border-neutral-200 rounded-xl focus:border-[#800000] focus:outline-hidden"
+                {/* 2. Online Payment (Credit/Debit Card) */}
+                <div
+                  onClick={() => setSelectedPaymentMethod('card')}
+                  className={`border rounded-xl p-3.5 flex items-center justify-between cursor-pointer transition-all ${
+                    selectedPaymentMethod === 'card'
+                      ? 'border-2 border-neutral-900 bg-neutral-50/50 shadow-xs'
+                      : 'border-neutral-200 bg-white hover:border-neutral-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-700 font-bold text-[10px] shrink-0">
+                      VISA
+                    </div>
+                    <div>
+                      <span className="text-xs sm:text-sm font-bold text-neutral-900 block">
+                        Online Payment (Credit/Debit Card)
+                      </span>
+                      <span className="text-[11px] text-neutral-500 block">
+                        Visa, Mastercard, Amex via SSLCommerz Gateway
+                      </span>
+                    </div>
+                  </div>
+                  <div
+                    className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                      selectedPaymentMethod === 'card'
+                        ? 'border-neutral-900 bg-neutral-900'
+                        : 'border-neutral-300'
+                    }`}
+                  >
+                    {selectedPaymentMethod === 'card' && (
+                      <div className="w-2 h-2 rounded-full bg-white" />
+                    )}
+                  </div>
+                </div>
+
+                {/* 3. bKash Payment */}
+                <div
+                  onClick={() => setSelectedPaymentMethod('bkash')}
+                  className={`border rounded-xl p-3.5 flex items-center justify-between cursor-pointer transition-all ${
+                    selectedPaymentMethod === 'bkash'
+                      ? 'border-2 border-neutral-900 bg-neutral-50/50 shadow-xs'
+                      : 'border-neutral-200 bg-white hover:border-neutral-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-[#e2136e] text-white flex items-center justify-center font-bold text-xs shrink-0">
+                      b
+                    </div>
+                    <div>
+                      <span className="text-xs sm:text-sm font-bold text-neutral-900 block">
+                        Bkash Payment
+                      </span>
+                      <span className="text-[11px] text-neutral-500 block">
+                        bKash Merchant / Personal Instant Deposit
+                      </span>
+                    </div>
+                  </div>
+                  <div
+                    className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                      selectedPaymentMethod === 'bkash'
+                        ? 'border-neutral-900 bg-neutral-900'
+                        : 'border-neutral-300'
+                    }`}
+                  >
+                    {selectedPaymentMethod === 'bkash' && (
+                      <div className="w-2 h-2 rounded-full bg-white" />
+                    )}
+                  </div>
+                </div>
+
+                {/* 4. Nagad Payment */}
+                <div
+                  onClick={() => setSelectedPaymentMethod('nagad')}
+                  className={`border rounded-xl p-3.5 flex items-center justify-between cursor-pointer transition-all ${
+                    selectedPaymentMethod === 'nagad'
+                      ? 'border-2 border-neutral-900 bg-neutral-50/50 shadow-xs'
+                      : 'border-neutral-200 bg-white hover:border-neutral-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-[#f7941d] text-white flex items-center justify-center font-bold text-xs shrink-0">
+                      N
+                    </div>
+                    <div>
+                      <span className="text-xs sm:text-sm font-bold text-neutral-900 block">
+                        Nagad Payment
+                      </span>
+                      <span className="text-[11px] text-neutral-500 block">
+                        Nagad Merchant / Wallet Instant Transfer
+                      </span>
+                    </div>
+                  </div>
+                  <div
+                    className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                      selectedPaymentMethod === 'nagad'
+                        ? 'border-neutral-900 bg-neutral-900'
+                        : 'border-neutral-300'
+                    }`}
+                  >
+                    {selectedPaymentMethod === 'nagad' && (
+                      <div className="w-2 h-2 rounded-full bg-white" />
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Inline Payment Details for bKash / Nagad / COD */}
+              <div className="mt-4 p-4 rounded-xl bg-neutral-50 border border-neutral-200 text-xs space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 font-semibold text-neutral-900">
+                    <Sparkles className="w-4 h-4 text-[#800000]" />
+                    <span>Advance Booking Deposit: ৳{advanceDeliveryFee}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleCopyMerchantNumber('01700000000')}
+                    className="text-[11px] text-[#800000] hover:underline font-semibold flex items-center gap-1 cursor-pointer"
+                  >
+                    {copiedNumber ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                    <span>{copiedNumber ? 'Number Copied' : 'Copy 01700-000000'}</span>
+                  </button>
+                </div>
+
+                <p className="text-neutral-500 text-[11px] leading-relaxed">
+                  Send advance delivery charge <strong>৳{advanceDeliveryFee}</strong> to our verified {selectedPaymentMethod.toUpperCase()} number, then enter the Transaction ID below (or verify upon clicking Pay).
+                </p>
+
+                <div className="pt-1">
+                  <input
+                    type="text"
+                    placeholder="Transaction ID / TrxID (e.g. 9K2837L10) - Optional here"
+                    value={inlineTrxId}
+                    onChange={(e) => setInlineTrxId(e.target.value)}
+                    className="w-full p-2.5 bg-white border border-neutral-200 rounded-lg text-xs font-mono font-bold uppercase tracking-wider focus:border-neutral-900 focus:outline-hidden"
                   />
                 </div>
               </div>
+            </div>
+          </div>
 
-              {/* Advance Delivery Explanation */}
-              <div className="bg-amber-50/70 border border-amber-200 rounded-xl p-4 text-xs text-amber-950 space-y-2">
-                <div className="flex items-center space-x-2 font-bold text-[#800000]">
-                  <ShieldCheck className="w-4 h-4" />
-                  <span>How HYDEE Cash On Delivery Works</span>
-                </div>
-                <p className="leading-relaxed">
-                  1. You pay only the delivery courier charge (<strong>৳{advanceDeliveryFee}</strong>) in advance via bKash / Nagad / Card to guarantee parcel dispatch.
-                  <br />
-                  2. We dispatch your bespoke package via Pathao / Steadfast verified courier.
-                  <br />
-                  3. When the courier arrives, open the package, inspect your garment, and pay the remaining balance of <strong>৳{remainingCodAmount.toLocaleString()}</strong> in cash!
+          {/* RIGHT COLUMN: Current Order (Matching Image 2 exactly) */}
+          <div className="lg:col-span-5 sticky top-8">
+            <div className="bg-[#F9FAFB] rounded-3xl p-5 sm:p-7 border border-neutral-200/80 shadow-2xs space-y-5">
+              
+              {/* Header */}
+              <div>
+                <h3 className="text-lg font-bold text-neutral-950">
+                  Current Order
+                </h3>
+                <p className="text-xs text-neutral-400 mt-0.5">
+                  The sum of all total payments for goods there
                 </p>
               </div>
 
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="w-full bg-[#800000] hover:bg-[#5c0000] text-white text-xs font-semibold tracking-wider py-4 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 active:scale-[0.99] disabled:bg-neutral-300 cursor-pointer"
-              >
-                {isSubmitting ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Creating Booking...</span>
-                  </>
-                ) : (
-                  <>
-                    <span>Confirm Order & Pay ৳{advanceDeliveryFee} Advance Fee</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </>
-                )}
-              </button>
-            </form>
-          </div>
-
-          {/* Right Column: Order Review */}
-          <div className="lg:col-span-5 space-y-6">
-            <div className="bg-white rounded-2xl border border-neutral-200/80 p-6 shadow-xs space-y-6">
-              <h3 className="font-serif text-lg font-bold text-neutral-950 pb-2 border-b border-neutral-100">
-                Order Review ({checkoutItems.length} {checkoutItems.length === 1 ? 'Piece' : 'Pieces'})
-              </h3>
-
-              {/* Items List */}
-              <div className="space-y-4 max-h-80 overflow-y-auto no-scrollbar">
+              {/* Items List (White rounded cards with + 1 - buttons matching Image 2) */}
+              <div className="space-y-3 max-h-72 overflow-y-auto no-scrollbar">
                 {checkoutItems.map((item) => (
                   <div
                     key={`${item.productId}-${item.variantId}`}
-                    className="flex space-x-3 pb-3 border-b border-neutral-100 last:border-0"
+                    className="bg-white rounded-2xl p-3.5 border border-neutral-200/70 shadow-2xs flex items-center gap-3.5"
                   >
+                    {/* Item Image */}
                     <img
                       src={item.imageUrl}
                       alt={item.name}
-                      className="w-16 h-20 object-cover rounded-lg bg-neutral-100 shrink-0"
+                      className="w-16 h-16 sm:w-18 sm:h-18 object-cover rounded-xl bg-neutral-100 shrink-0"
                     />
-                    <div className="flex-1 flex flex-col justify-between text-xs">
-                      <div>
-                        <h4 className="font-serif font-semibold text-neutral-900 line-clamp-1">
+
+                    {/* Item Details */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex justify-between items-start gap-2">
+                        <h4 className="font-semibold text-xs text-neutral-900 line-clamp-1">
                           {item.name}
                         </h4>
-                        <p className="text-neutral-500 mt-0.5">
-                          Size: {item.size} · Color: {item.color} · Qty: {item.quantity}
-                        </p>
+                        <span className="font-sans font-bold text-xs sm:text-sm text-neutral-900 tabular-nums shrink-0">
+                          ৳{(item.price * item.quantity).toLocaleString()}
+                        </span>
                       </div>
-                      <p className="font-bold text-neutral-950">
-                        ৳{(item.price * item.quantity).toLocaleString()}
+
+                      <p className="text-[11px] text-neutral-400 mt-0.5">
+                        {item.size ? `Size: ${item.size}` : ''} {item.color ? `· ${item.color}` : ''}
                       </p>
+
+                      {/* Quantity Controller (+ 1 - buttons matching Image 2) */}
+                      <div className="flex items-center justify-between mt-2 pt-1 border-t border-neutral-100/60">
+                        <span className="text-[11px] text-neutral-500 font-medium">
+                          Quantity : {item.quantity}
+                        </span>
+
+                        <div className="flex items-center gap-1.5 bg-neutral-100 p-0.5 rounded-lg">
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateItemQuantity(item, 1)}
+                            className="w-6 h-6 rounded-md bg-white hover:bg-neutral-200 text-neutral-800 flex items-center justify-center font-bold text-xs transition-colors cursor-pointer shadow-2xs"
+                            title="Increase quantity"
+                          >
+                            <Plus className="w-3 h-3" />
+                          </button>
+                          <span className="text-xs font-bold text-neutral-900 px-1 font-mono">
+                            {item.quantity}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateItemQuantity(item, -1)}
+                            disabled={item.quantity <= 1}
+                            className="w-6 h-6 rounded-md bg-white hover:bg-neutral-200 text-neutral-800 flex items-center justify-center font-bold text-xs transition-colors cursor-pointer shadow-2xs disabled:opacity-40"
+                            title="Decrease quantity"
+                          >
+                            <Minus className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 ))}
               </div>
 
-              {/* Promo code input */}
-              <div className="pt-2">
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    placeholder="Discount Code (e.g. HYDEE1000)"
-                    value={discountCode}
-                    onChange={(e) => setDiscountCode(e.target.value)}
-                    className="flex-1 text-xs p-3 border border-neutral-200 rounded-xl focus:border-[#800000] focus:outline-hidden"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleApplyPromo}
-                    className="bg-neutral-900 hover:bg-neutral-800 text-white text-xs font-semibold px-4 rounded-xl cursor-pointer"
-                  >
-                    Apply
-                  </button>
-                </div>
-                {appliedDiscount && (
-                  <span className="text-[11px] text-emerald-600 font-medium mt-1.5 flex items-center gap-1">
-                    <Tag className="w-3.5 h-3.5" />
-                    Code {appliedDiscount} Applied Successfully (-৳{discountAmount.toLocaleString()})
-                  </span>
+              {/* Subtotal Big Row (Matching Image 2) */}
+              <div className="pt-3 border-t border-neutral-200 flex justify-between items-center">
+                <span className="text-base sm:text-lg font-bold text-neutral-950">
+                  Subtotal
+                </span>
+                <span className="font-sans text-base sm:text-lg font-extrabold text-neutral-950 tabular-nums">
+                  ৳{subtotal.toLocaleString()}
+                </span>
+              </div>
+
+              {/* Promo Code Row (Matching Image 2) */}
+              <div className="pt-1">
+                {appliedDiscount ? (
+                  <div className="flex items-center justify-between text-xs p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800">
+                    <span className="flex items-center gap-1 font-medium">
+                      <Tag className="w-3.5 h-3.5" />
+                      <span>{appliedDiscount}</span>
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold tabular-nums">- ৳{discountAmount.toLocaleString()}</span>
+                      <button
+                        type="button"
+                        onClick={handleRemovePromo}
+                        className="text-neutral-400 hover:text-red-600 cursor-pointer"
+                        title="Remove promo"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="Code Promo (e.g. HYDEE1000)"
+                      value={discountCode}
+                      onChange={(e) => setDiscountCode(e.target.value)}
+                      className="flex-1 text-xs px-3 py-2.5 bg-white border border-neutral-200 rounded-xl focus:border-neutral-900 focus:outline-hidden"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleApplyPromo}
+                      className="bg-neutral-900 hover:bg-neutral-800 text-white text-xs font-semibold px-4 rounded-xl cursor-pointer transition-colors"
+                    >
+                      Apply
+                    </button>
+                  </div>
                 )}
               </div>
 
-              {/* Financial Breakdown Table */}
-              <div className="pt-4 border-t border-neutral-100 space-y-2.5 text-xs">
-                <div className="flex justify-between text-neutral-600">
-                  <span>Garment Subtotal</span>
-                  <span className="font-semibold text-neutral-950">
-                    ৳{subtotal.toLocaleString()}
+              {/* Detailed Breakdown Lines (Matching Image 2) */}
+              <div className="space-y-2 text-xs text-neutral-500 pt-2 border-t border-neutral-200">
+                <div className="flex justify-between">
+                  <span>Items</span>
+                  <span className="font-semibold text-neutral-900 font-sans tabular-nums">{totalItemCount}x</span>
+                </div>
+
+                <div className="flex justify-between">
+                  <span>Code Promo</span>
+                  <span className="font-semibold text-neutral-900 font-sans tabular-nums">
+                    {discountAmount > 0 ? `- ৳${discountAmount.toLocaleString()}` : '$0.00'}
                   </span>
                 </div>
 
-                {discountAmount > 0 && (
-                  <div className="flex justify-between text-emerald-600">
-                    <span>Discount</span>
-                    <span className="font-semibold">-৳{discountAmount.toLocaleString()}</span>
-                  </div>
-                )}
-
-                <div className="flex justify-between text-neutral-600">
-                  <span className="flex items-center gap-1">
-                    Advance Delivery Fee ({selectedZone.name})
+                <div className="flex justify-between">
+                  <span>Delivery Service</span>
+                  <span className="font-semibold text-neutral-900 font-sans tabular-nums">
+                    ৳{advanceDeliveryFee}
                   </span>
-                  <span className="font-bold text-[#800000]">৳{advanceDeliveryFee}</span>
                 </div>
 
-                <div className="pt-3 border-t border-neutral-100 flex justify-between text-sm font-bold text-neutral-950">
-                  <span>Total Order Value</span>
-                  <span>৳{totalAmount.toLocaleString()}</span>
+                <div className="flex justify-between">
+                  <span>Vat (0%)</span>
+                  <span className="font-semibold text-neutral-900 font-sans tabular-nums">৳0</span>
                 </div>
 
-                {/* Important Distinction */}
-                <div className="pt-3 p-3 bg-neutral-50 rounded-xl space-y-1">
+                {/* Important Advance vs Doorstep COD Split */}
+                <div className="p-3 bg-white rounded-xl border border-neutral-200/80 space-y-1.5 mt-2">
                   <div className="flex justify-between text-xs font-bold text-[#800000]">
-                    <span>1. Payable Now (Advance)</span>
-                    <span>৳{advanceDeliveryFee}</span>
+                    <span>Advance Payable Now (Deposit)</span>
+                    <span className="font-sans tabular-nums">৳{advanceDeliveryFee}</span>
                   </div>
                   <div className="flex justify-between text-xs font-bold text-neutral-800">
-                    <span>2. Payable On Doorstep Delivery</span>
-                    <span>৳{remainingCodAmount.toLocaleString()}</span>
+                    <span>Payable on Doorstep Delivery</span>
+                    <span className="font-sans tabular-nums">৳{remainingCodAmount.toLocaleString()}</span>
                   </div>
                 </div>
               </div>
+
+              {/* Primary Call to Action Button (Matching Image 2) */}
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="w-full py-4 rounded-2xl bg-neutral-950 hover:bg-[#800000] text-white font-bold text-xs sm:text-sm tracking-wide shadow-md transition-all active:scale-[0.99] flex items-center justify-center gap-2 cursor-pointer disabled:bg-neutral-300"
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Processing Order...</span>
+                  </>
+                ) : (
+                  <span>
+                    Pay ৳{selectedPaymentMethod === 'cod' ? advanceDeliveryFee : totalAmount.toLocaleString()}
+                  </span>
+                )}
+              </button>
             </div>
           </div>
-        </div>
+        </form>
       </div>
 
-      {/* Advance Delivery Payment Gateway Modal */}
+      {/* Advance Delivery Payment Gateway Modal (If not paid inline) */}
       {pendingOrder && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-xs animate-in fade-in"
@@ -522,14 +886,15 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
           }}
         >
           <div className="bg-white rounded-2xl sm:rounded-3xl max-w-lg w-full max-h-[92vh] flex flex-col shadow-2xl border border-neutral-200 overflow-hidden relative">
-            {/* Sticky Header with prominent, easy-to-click close button */}
+            
+            {/* Modal Header */}
             <div className="sticky top-0 z-20 bg-white/95 backdrop-blur-md px-5 sm:px-6 py-4 border-b border-neutral-100 flex items-center justify-between shrink-0">
               <div>
                 <span className="text-[10px] font-bold tracking-widest text-[#800000] uppercase block">
-                  Step 2 of 2: Verified Advance Payment
+                  Step 2: Verified Advance Payment
                 </span>
                 <h3 className="font-serif text-lg sm:text-xl font-bold text-neutral-950 mt-0.5">
-                  Complete ৳{pendingOrder.advanceDeliveryFee} Advance Payment
+                  Confirm ৳{pendingOrder.advanceDeliveryFee} Advance Payment
                 </h3>
               </div>
               <div className="flex items-center space-x-2">
@@ -541,15 +906,29 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                   onClick={() => setPendingOrder(null)}
                   className="w-8 h-8 rounded-full bg-neutral-100 hover:bg-neutral-200 text-neutral-600 hover:text-neutral-950 flex items-center justify-center transition-colors cursor-pointer"
                   title="Close and edit details"
-                  aria-label="Close modal"
                 >
                   <X className="w-4 h-4" />
                 </button>
               </div>
             </div>
 
-            {/* Scrollable Modal Content */}
-            <div className="overflow-y-auto p-5 sm:p-6 space-y-4 flex-1 touch-scroll">
+            {/* Modal Content */}
+            <div className="overflow-y-auto p-5 sm:p-6 space-y-4 text-xs flex-1 touch-scroll">
+              <div className="p-4 bg-rose-50/50 border border-rose-100 rounded-2xl space-y-1">
+                <div className="flex justify-between items-center text-xs">
+                  <span className="font-semibold text-neutral-700">Order Reference:</span>
+                  <span className="font-mono font-bold text-neutral-900">{pendingOrder.orderNumber}</span>
+                </div>
+                <div className="flex justify-between items-center text-xs">
+                  <span className="font-semibold text-neutral-700">Advance Delivery Fee:</span>
+                  <span className="font-bold text-[#800000]">৳{pendingOrder.advanceDeliveryFee}</span>
+                </div>
+                <div className="flex justify-between items-center text-xs">
+                  <span className="font-semibold text-neutral-700">Doorstep COD Balance:</span>
+                  <span className="font-bold text-neutral-900">৳{pendingOrder.remainingCodAmount.toLocaleString()}</span>
+                </div>
+              </div>
+
               {paymentError && (
                 <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl flex items-center gap-2">
                   <AlertCircle className="w-4 h-4 shrink-0" />
@@ -557,124 +936,81 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                 </div>
               )}
 
-              <p className="text-xs text-neutral-600 leading-relaxed">
-                As per HYDEE policy, an advance payment of <strong>৳{pendingOrder.advanceDeliveryFee}</strong> is required to confirm order #{pendingOrder.orderNumber}. The remaining <strong>৳{pendingOrder.remainingCodAmount.toLocaleString()}</strong> is collected as cash on delivery.
-              </p>
-
-              {/* Payment Method Selector */}
-              <div>
-                <label className="block text-xs font-semibold text-neutral-800 mb-2">
-                  Select Payment Method:
-                </label>
-                <div className="grid grid-cols-3 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMethod('bkash')}
-                    className={`py-3 px-2 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
-                      paymentMethod === 'bkash'
-                        ? 'border-[#E2136E] bg-[#E2136E]/10 text-[#E2136E]'
-                        : 'border-neutral-200 hover:border-neutral-300 text-neutral-700'
-                    }`}
-                  >
-                    bKash
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMethod('nagad')}
-                    className={`py-3 px-2 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
-                      paymentMethod === 'nagad'
-                        ? 'border-[#F7931E] bg-[#F7931E]/10 text-[#F7931E]'
-                        : 'border-neutral-200 hover:border-neutral-300 text-neutral-700'
-                    }`}
-                  >
-                    Nagad
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMethod('card')}
-                    className={`py-3 px-2 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
-                      paymentMethod === 'card'
-                        ? 'border-neutral-900 bg-neutral-900 text-white'
-                        : 'border-neutral-200 hover:border-neutral-300 text-neutral-700'
-                    }`}
-                  >
-                    Debit / Card
-                  </button>
-                </div>
-              </div>
-
               {/* Payment Instructions */}
-              <div className="p-4 bg-neutral-50 rounded-xl border border-neutral-200 text-xs space-y-1.5 text-neutral-700">
-                <p className="font-semibold text-neutral-900">
-                  {paymentMethod === 'bkash' && 'bKash Merchant / Payment Instructions:'}
-                  {paymentMethod === 'nagad' && 'Nagad Merchant Instructions:'}
-                  {paymentMethod === 'card' && 'Card / Online Banking Instructions:'}
-                </p>
-                <p>
-                  1. Send exactly <strong>৳{pendingOrder.advanceDeliveryFee}</strong> to HYDEE official account:{' '}
-                  <span className="font-mono font-bold text-neutral-950">01711-002233</span>
-                </p>
-                <p>
-                  2. Reference: <span className="font-mono font-bold">{pendingOrder.orderNumber}</span>
-                </p>
-                <p>3. Enter the 8–10 character Transaction ID (TrxID) below to verify.</p>
-              </div>
-
-              {/* TrxID Input */}
-              <div>
-                <div className="flex justify-between items-center mb-1.5">
-                  <label className="text-xs font-semibold text-neutral-800">
-                    Transaction ID (TrxID) *
-                  </label>
-                  {/* Sandbox helper */}
-                  <button
-                    type="button"
-                    onClick={handleSimulateSandboxSuccess}
-                    className="text-[11px] text-[#800000] font-medium hover:underline cursor-pointer"
-                  >
-                    [Sandbox Auto-Fill TrxID]
-                  </button>
+              <div className="space-y-3">
+                <div className="p-3.5 bg-neutral-50 rounded-xl border border-neutral-200 text-neutral-700 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-neutral-900 uppercase">
+                      {selectedPaymentMethod} Number
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleCopyMerchantNumber('01700000000')}
+                      className="text-[#800000] font-semibold text-[11px] hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                      {copiedNumber ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                      <span>{copiedNumber ? 'Copied' : 'Copy'}</span>
+                    </button>
+                  </div>
+                  <p className="font-mono text-sm font-bold text-neutral-900 tracking-wider">
+                    01700-000000
+                  </p>
+                  <p className="text-[11px] text-neutral-500">
+                    Send <strong>৳{pendingOrder.advanceDeliveryFee}</strong> and enter the Transaction ID below.
+                  </p>
                 </div>
-                <input
-                  type="text"
-                  placeholder="e.g. 9J18KD39A"
-                  value={transactionId}
-                  onChange={(e) => setTransactionId(e.target.value)}
-                  className="w-full text-xs font-mono p-3.5 border border-neutral-200 rounded-xl uppercase focus:border-[#800000] focus:outline-hidden"
-                />
+
+                {/* TrxID Input */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="font-semibold text-neutral-800">
+                      Transaction ID (TrxID) *
+                    </label>
+                    <button
+                      type="button"
+                      onClick={handleSimulateSandboxSuccess}
+                      className="text-[10px] text-[#800000] hover:underline font-semibold cursor-pointer"
+                    >
+                      + Autofill Test TrxID
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. 9K2837L10"
+                    value={modalTrxId}
+                    onChange={(e) => setModalTrxId(e.target.value)}
+                    className="w-full p-3 border border-neutral-300 rounded-xl font-mono text-sm font-bold uppercase tracking-wider focus:border-neutral-900 focus:outline-hidden bg-white"
+                  />
+                </div>
               </div>
 
-              <div className="pt-2 flex flex-col sm:flex-row items-center gap-2.5">
+              {/* Action Buttons */}
+              <div className="pt-2 space-y-2 border-t border-neutral-100">
                 <button
                   type="button"
-                  onClick={() => setPendingOrder(null)}
-                  className="w-full sm:w-auto px-5 py-3.5 border border-neutral-200 rounded-xl text-xs font-semibold text-neutral-600 hover:bg-neutral-100 transition-colors cursor-pointer text-center"
-                >
-                  Cancel / Edit Info
-                </button>
-                <button
-                  type="button"
-                  onClick={handleVerifyAdvancePayment}
+                  onClick={handleVerifyModalPayment}
                   disabled={isVerifyingPayment}
-                  className="flex-1 w-full bg-[#800000] hover:bg-[#5c0000] text-white text-xs font-semibold tracking-wider py-3.5 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 disabled:bg-neutral-300 cursor-pointer"
+                  className="w-full bg-[#800000] hover:bg-[#600000] text-white py-3.5 rounded-xl font-semibold text-xs tracking-wider uppercase transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:bg-neutral-300"
                 >
                   {isVerifyingPayment ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Verifying Gateway Callback...</span>
+                      <span>Verifying Payment...</span>
                     </>
                   ) : (
-                    <>
-                      <CheckCircle2 className="w-4 h-4" />
-                      <span>Verify & Confirm Booking</span>
-                    </>
+                    <span>Verify & Confirm Booking</span>
                   )}
                 </button>
-              </div>
 
-              <p className="text-[10px] text-center text-neutral-400">
-                Encrypted with SSL and automated verification.
-              </p>
+                <button
+                  type="button"
+                  onClick={() => setPendingOrder(null)}
+                  className="w-full py-2.5 text-xs text-neutral-500 hover:text-neutral-800 font-semibold cursor-pointer"
+                >
+                  Cancel / Edit Booking Info
+                </button>
+              </div>
             </div>
           </div>
         </div>
