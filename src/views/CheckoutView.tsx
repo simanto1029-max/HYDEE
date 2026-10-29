@@ -4,7 +4,6 @@ import {
   User,
   Phone,
   MapPin,
-  CheckCircle2,
   AlertCircle,
   Loader2,
   Tag,
@@ -14,7 +13,6 @@ import {
   Check,
   Plus,
   Minus,
-  Sparkles,
   ShieldCheck,
   Clock,
 } from 'lucide-react';
@@ -58,12 +56,11 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
   const [district, setDistrict] = useState('Dhaka');
   const [deliveryNotes, setDeliveryNotes] = useState('');
 
-  // Exactly 2 Payment Options as requested by user:
+  // Exactly 2 Payment Options:
   // 1. 'advance_cod' -> Cash On Delivery (Advance courier delivery fee required)
   // 2. 'full_prepaid' -> Full Payment (Product price + delivery fee paid 100% in advance)
   const [paymentType, setPaymentType] = useState<'advance_cod' | 'full_prepaid'>('advance_cod');
   const [subPaymentChannel, setSubPaymentChannel] = useState<'bkash' | 'nagad'>('bkash');
-  const [inlineTrxId, setInlineTrxId] = useState('');
   const [copiedNumber, setCopiedNumber] = useState<string | null>(null);
 
   // Promo code states
@@ -166,7 +163,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
     setDiscountCode('');
   };
 
-  // Form submission: Create order & proceed to verification
+  // Form submission: Validate inputs, create pending order and OPEN the payment modal
   const handleSubmitCheckout = (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -208,28 +205,11 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
       return;
     }
 
+    // Immediately open the Payment Modal containing the payment options
     const createdOrder = result.order;
-
-    // If customer already typed TrxID inline in checkout form
-    if (inlineTrxId.trim() && inlineTrxId.trim().length >= 6) {
-      const verifyResult = store.verifyAdvancePayment(
-        createdOrder.orderNumber,
-        subPaymentChannel,
-        inlineTrxId.trim().toUpperCase(),
-        `${subPaymentChannel.toUpperCase()} Checkout Direct (${paymentType === 'full_prepaid' ? 'Full Payment' : 'Advance COD'})`
-      );
-
-      if (verifyResult.success && verifyResult.order) {
-        if (!directBuyItem) onClearCart();
-        onOrderConfirmed(verifyResult.order);
-        onNavigate(`/thank-you?order=${verifyResult.order.orderNumber}`);
-        return;
-      }
-    }
-
-    // Otherwise, open the verification modal with pre-selected method
     setPendingOrder(createdOrder);
-    setModalTrxId(inlineTrxId.trim());
+    setModalTrxId('');
+    setPaymentError(null);
   };
 
   // Verify payment inside modal
@@ -273,7 +253,6 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
   const handleSimulateSandboxSuccess = () => {
     const randomTrx = `TRX-${subPaymentChannel.toUpperCase()}-${Math.floor(100000 + Math.random() * 900000)}`;
     setModalTrxId(randomTrx);
-    setInlineTrxId(randomTrx);
   };
 
   if (checkoutItems.length === 0 && !pendingOrder) {
@@ -373,7 +352,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                   </div>
                 </div>
 
-                {/* Mobile Number (Email box completely removed per user request) */}
+                {/* Mobile Number (Email box completely removed) */}
                 <div className="border border-neutral-300 rounded-xl p-3 bg-white focus-within:border-black focus-within:ring-1 focus-within:ring-black transition-all flex items-start gap-2.5">
                   <Phone className="w-4 h-4 text-black mt-0.5 shrink-0" />
                   <div className="flex-1">
@@ -447,7 +426,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
               </div>
             </div>
 
-            {/* Section 2: Payment Method (Only 2 options per user request) */}
+            {/* Section 2: Payment Method (Only 2 clean options on the main page) */}
             <div className="pt-2">
               <div className="flex items-center justify-between mb-1">
                 <h2 className="text-xl sm:text-2xl font-bold text-black tracking-tight">
@@ -542,111 +521,6 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                       <div className="w-2 h-2 rounded-full bg-white" />
                     )}
                   </div>
-                </div>
-              </div>
-
-              {/* Dynamic Payment Deposit Drawer (Shown for both options) */}
-              <div className="mt-4 p-4.5 rounded-2xl bg-neutral-50 border border-neutral-300 text-black space-y-3.5">
-                
-                {/* Header note about 2 days automated gateway */}
-                <div className="p-3 bg-white rounded-xl border border-neutral-300 flex items-start gap-2.5">
-                  <Clock className="w-4 h-4 text-black shrink-0 mt-0.5" />
-                  <div className="text-[11px] text-black leading-relaxed font-medium">
-                    <strong className="font-bold text-black">Payment Notice: </strong>
-                    Our automated online card & instant payment gateway is being connected and will be live in 2 days. 
-                    Currently, please transfer <strong>৳{payableNow.toLocaleString()}</strong> {paymentType === 'advance_cod' ? '(Advance Delivery Fee)' : '(Full Order Value)'} via bKash or Nagad, then enter your TrxID below to confirm your order.
-                  </div>
-                </div>
-
-                {/* bKash / Nagad Selector */}
-                <div>
-                  <span className="block text-[11px] uppercase font-bold text-black tracking-wider mb-2">
-                    Select Transfer Channel:
-                  </span>
-                  <div className="grid grid-cols-2 gap-2.5">
-                    
-                    {/* bKash Button */}
-                    <button
-                      type="button"
-                      onClick={() => setSubPaymentChannel('bkash')}
-                      className={`p-3 rounded-xl border flex items-center justify-between text-xs font-bold transition-all cursor-pointer ${
-                        subPaymentChannel === 'bkash'
-                          ? 'border-2 border-black bg-white shadow-xs'
-                          : 'border-neutral-300 bg-neutral-100 hover:border-black text-black'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="w-5 h-5 rounded-md bg-[#e2136e] text-white flex items-center justify-center text-[10px] font-bold">
-                          b
-                        </span>
-                        <span className="text-black font-bold">bKash</span>
-                      </div>
-                      <span className="text-[10px] text-black font-semibold">01700-000000</span>
-                    </button>
-
-                    {/* Nagad Button */}
-                    <button
-                      type="button"
-                      onClick={() => setSubPaymentChannel('nagad')}
-                      className={`p-3 rounded-xl border flex items-center justify-between text-xs font-bold transition-all cursor-pointer ${
-                        subPaymentChannel === 'nagad'
-                          ? 'border-2 border-black bg-white shadow-xs'
-                          : 'border-neutral-300 bg-neutral-100 hover:border-black text-black'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="w-5 h-5 rounded-md bg-[#f7941d] text-white flex items-center justify-center text-[10px] font-bold">
-                          N
-                        </span>
-                        <span className="text-black font-bold">Nagad</span>
-                      </div>
-                      <span className="text-[10px] text-black font-semibold">01700-000000</span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Amount to Send & 1-Click Copy Number */}
-                <div className="flex items-center justify-between p-3 bg-white rounded-xl border border-neutral-300">
-                  <div>
-                    <span className="text-[10px] uppercase font-bold text-black tracking-wider block">
-                      Payable Amount Now:
-                    </span>
-                    <span className="font-sans text-base font-extrabold text-black tabular-nums">
-                      ৳{payableNow.toLocaleString()}
-                    </span>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => handleCopyNumber('01700000000', subPaymentChannel)}
-                    className="px-3 py-1.5 rounded-lg bg-black text-white hover:bg-neutral-800 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
-                  >
-                    {copiedNumber === subPaymentChannel ? (
-                      <>
-                        <Check className="w-3.5 h-3.5 text-emerald-400" />
-                        <span>Copied!</span>
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="w-3.5 h-3.5 text-white" />
-                        <span>Copy 01700-000000</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-
-                {/* Inline TrxID Input Box */}
-                <div>
-                  <label className="block text-[11px] uppercase font-bold text-black tracking-wider mb-1">
-                    Transaction ID / TrxID (Optional here or in next popup) *
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. 9K2837L10 (From bKash / Nagad SMS)"
-                    value={inlineTrxId}
-                    onChange={(e) => setInlineTrxId(e.target.value)}
-                    className="w-full p-3 bg-white border border-neutral-300 rounded-xl text-xs sm:text-sm font-mono font-bold uppercase tracking-wider text-black placeholder:text-neutral-500 focus:border-black focus:outline-hidden"
-                  />
                 </div>
               </div>
             </div>
@@ -846,7 +720,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
         </form>
       </div>
 
-      {/* Advance Delivery Payment Gateway Modal (If not verified inline) */}
+      {/* Payment Options Modal (Opens when customer clicks Pay button) */}
       {pendingOrder && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-xs animate-in fade-in"
@@ -909,62 +783,114 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                 </div>
               )}
 
-              {/* Payment Instructions */}
-              <div className="space-y-3">
-                <div className="p-3.5 bg-white rounded-xl border border-neutral-300 text-black space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-black uppercase">
-                      {subPaymentChannel} Merchant Number
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => handleCopyNumber('01700000000', `modal-${subPaymentChannel}`)}
-                      className="text-black font-bold text-[11px] hover:underline flex items-center gap-1 cursor-pointer"
-                    >
-                      {copiedNumber === `modal-${subPaymentChannel}` ? (
-                        <>
-                          <Check className="w-3 h-3 text-emerald-600" />
-                          <span>Copied</span>
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="w-3 h-3 text-black" />
-                          <span>Copy</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-                  <p className="font-mono text-sm font-bold text-black tracking-wider">
-                    01700-000000
-                  </p>
-                  <p className="text-[11px] text-black font-medium">
-                    Send <strong>৳{payableNow.toLocaleString()}</strong> to the number above and enter your Transaction ID (TrxID) below:
-                  </p>
+              {/* Gateway Notice Box (Matching User's Screenshot) */}
+              <div className="p-3.5 bg-white rounded-xl border border-neutral-300 flex items-start gap-2.5">
+                <Clock className="w-4 h-4 text-black shrink-0 mt-0.5" />
+                <div className="text-[11px] text-black leading-relaxed font-medium">
+                  <strong className="font-bold text-black">Payment Notice: </strong>
+                  Our automated online card & instant payment gateway is being connected and will be live in 2 days. 
+                  Currently, please transfer <strong>৳{payableNow.toLocaleString()}</strong> {paymentType === 'full_prepaid' ? '(Full Order Value)' : '(Advance Delivery Fee)'} via bKash or Nagad, then enter your TrxID below to confirm your order.
+                </div>
+              </div>
+
+              {/* Transfer Channel Selector (Matching User's Screenshot) */}
+              <div>
+                <span className="block text-[11px] uppercase font-bold text-black tracking-wider mb-2">
+                  Select Transfer Channel:
+                </span>
+                <div className="grid grid-cols-2 gap-2.5">
+                  {/* bKash Button */}
+                  <button
+                    type="button"
+                    onClick={() => setSubPaymentChannel('bkash')}
+                    className={`p-3 rounded-xl border flex items-center justify-between text-xs font-bold transition-all cursor-pointer ${
+                      subPaymentChannel === 'bkash'
+                        ? 'border-2 border-black bg-white shadow-xs'
+                        : 'border-neutral-300 bg-neutral-100 hover:border-black text-black'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="w-5 h-5 rounded-md bg-[#e2136e] text-white flex items-center justify-center text-[10px] font-bold">
+                        b
+                      </span>
+                      <span className="text-black font-bold">bKash</span>
+                    </div>
+                    <span className="text-[10px] text-black font-semibold">01700-000000</span>
+                  </button>
+
+                  {/* Nagad Button */}
+                  <button
+                    type="button"
+                    onClick={() => setSubPaymentChannel('nagad')}
+                    className={`p-3 rounded-xl border flex items-center justify-between text-xs font-bold transition-all cursor-pointer ${
+                      subPaymentChannel === 'nagad'
+                        ? 'border-2 border-black bg-white shadow-xs'
+                        : 'border-neutral-300 bg-neutral-100 hover:border-black text-black'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="w-5 h-5 rounded-md bg-[#f7941d] text-white flex items-center justify-center text-[10px] font-bold">
+                        N
+                      </span>
+                      <span className="text-black font-bold">Nagad</span>
+                    </div>
+                    <span className="text-[10px] text-black font-semibold">01700-000000</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Amount to Send & 1-Click Copy Number (Matching User's Screenshot) */}
+              <div className="flex items-center justify-between p-3.5 bg-white rounded-xl border border-neutral-300">
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-black tracking-wider block">
+                    Payable Amount Now:
+                  </span>
+                  <span className="font-sans text-base sm:text-lg font-extrabold text-black tabular-nums">
+                    ৳{payableNow.toLocaleString()}
+                  </span>
                 </div>
 
-                {/* TrxID Input */}
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="font-bold text-black uppercase text-[11px] tracking-wider">
-                      Transaction ID (TrxID) *
-                    </label>
-                    <button
-                      type="button"
-                      onClick={handleSimulateSandboxSuccess}
-                      className="text-[10px] text-[#800000] hover:underline font-bold cursor-pointer"
-                    >
-                      + Autofill Test TrxID
-                    </button>
-                  </div>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. 9K2837L10"
-                    value={modalTrxId}
-                    onChange={(e) => setModalTrxId(e.target.value)}
-                    className="w-full p-3 border border-neutral-400 rounded-xl font-mono text-sm font-bold uppercase tracking-wider focus:border-black focus:outline-hidden bg-white text-black placeholder:text-neutral-500"
-                  />
+                <button
+                  type="button"
+                  onClick={() => handleCopyNumber('01700000000', `modal-${subPaymentChannel}`)}
+                  className="px-3.5 py-2 rounded-xl bg-black text-white hover:bg-neutral-800 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  {copiedNumber === `modal-${subPaymentChannel}` ? (
+                    <>
+                      <Check className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Copied!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3.5 h-3.5 text-white" />
+                      <span>Copy 01700-000000</span>
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {/* TrxID Input (Matching User's Screenshot) */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="font-bold text-black uppercase text-[11px] tracking-wider">
+                    Transaction ID / TrxID (From bKash / Nagad SMS) *
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleSimulateSandboxSuccess}
+                    className="text-[10px] text-[#800000] hover:underline font-bold cursor-pointer"
+                  >
+                    + Autofill Test TrxID
+                  </button>
                 </div>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. 9K2837L10"
+                  value={modalTrxId}
+                  onChange={(e) => setModalTrxId(e.target.value)}
+                  className="w-full p-3 border border-neutral-400 rounded-xl font-mono text-sm font-bold uppercase tracking-wider focus:border-black focus:outline-hidden bg-white text-black placeholder:text-neutral-500"
+                />
               </div>
 
               {/* Action Buttons */}
