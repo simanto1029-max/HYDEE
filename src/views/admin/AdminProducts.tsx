@@ -33,6 +33,8 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ onNavigateToProduc
   // Edit / Create modal state
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [productToDelete, setProductToDelete] = useState<Product | null>(null);
+  const [deleteNotice, setDeleteNotice] = useState<string | null>(null);
 
   // Form state
   const [formName, setFormName] = useState('');
@@ -275,11 +277,18 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ onNavigateToProduc
     refreshList();
   };
 
-  const handleDelete = (id: string) => {
-    if (confirm('Are you sure you want to remove this piece from the archive?')) {
-      store.deleteProduct(id);
-      refreshList();
-    }
+  const handleInitiateDelete = (product: Product) => {
+    setProductToDelete(product);
+  };
+
+  const handleConfirmDelete = () => {
+    if (!productToDelete) return;
+    const name = productToDelete.name;
+    store.deleteProduct(productToDelete.id);
+    refreshList();
+    setProductToDelete(null);
+    setDeleteNotice(`Product "${name}" was removed from the boutique archive.`);
+    setTimeout(() => setDeleteNotice(null), 3500);
   };
 
   const handleDuplicate = (id: string) => {
@@ -310,12 +319,19 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ onNavigateToProduc
 
         <button
           onClick={handleOpenCreate}
-          className="bg-[#800000] hover:bg-[#5c0000] text-white text-xs font-semibold px-5 py-3 rounded-xl uppercase tracking-wider inline-flex items-center gap-2 shadow-xs"
+          className="bg-[#800000] hover:bg-[#5c0000] text-white text-xs font-semibold px-5 py-3 rounded-xl uppercase tracking-wider inline-flex items-center gap-2 shadow-xs cursor-pointer"
         >
           <Plus className="w-4 h-4" />
           <span>New Garment Piece</span>
         </button>
       </div>
+
+      {deleteNotice && (
+        <div className="p-3.5 bg-red-50 border border-red-200 text-red-800 text-xs rounded-xl flex items-center gap-2 font-bold animate-in fade-in">
+          <Trash2 className="w-4 h-4 text-red-600 shrink-0" />
+          <span>{deleteNotice}</span>
+        </div>
+      )}
 
       {/* Filter / Search Bar */}
       <div className="flex flex-col sm:flex-row gap-3">
@@ -444,8 +460,9 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ onNavigateToProduc
                         <Edit2 className="w-4 h-4" />
                       </button>
                       <button
-                        onClick={() => handleDelete(product.id)}
-                        className="p-1.5 text-neutral-400 hover:text-red-600 transition-colors"
+                        type="button"
+                        onClick={() => handleInitiateDelete(product)}
+                        className="p-1.5 text-neutral-400 hover:text-red-600 transition-colors cursor-pointer"
                         title="Delete Product"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -918,6 +935,62 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ onNavigateToProduc
                 className="px-6 py-2.5 rounded-full bg-[#800000] hover:bg-[#5c0000] text-white font-bold uppercase tracking-wider transition-all shadow-md cursor-pointer"
               >
                 Save Piece
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* In-App Delete Confirmation Modal (Reliable on all browsers & Vercel) */}
+      {productToDelete && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs animate-in fade-in"
+          onClick={() => setProductToDelete(null)}
+        >
+          <div
+            className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl border border-neutral-300"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3.5">
+              <div className="w-10 h-10 rounded-full bg-red-100 text-red-700 flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5 text-red-600" />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-bold text-base text-neutral-950">Delete Garment Product</h3>
+                <p className="text-xs text-neutral-500 mt-1">
+                  Are you sure you want to permanently delete this piece from your boutique catalogue?
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 p-3 bg-neutral-50 rounded-xl border border-neutral-200">
+              <img
+                src={productToDelete.images[0]}
+                alt={productToDelete.name}
+                className="w-12 h-12 object-cover rounded-lg bg-neutral-200 shrink-0"
+              />
+              <div className="min-w-0 flex-1 text-xs">
+                <p className="font-bold text-neutral-900 truncate">{productToDelete.name}</p>
+                <p className="font-mono text-neutral-500 text-[11px]">
+                  {productToDelete.sku} · ৳{productToDelete.price.toLocaleString()}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2.5 pt-2 border-t border-neutral-100">
+              <button
+                type="button"
+                onClick={() => setProductToDelete(null)}
+                className="px-4 py-2 border border-neutral-300 text-neutral-700 hover:bg-neutral-100 rounded-xl text-xs font-semibold cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                className="px-5 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold cursor-pointer transition-colors shadow-sm"
+              >
+                Yes, Delete Product
               </button>
             </div>
           </div>

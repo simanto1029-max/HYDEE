@@ -138,22 +138,34 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
     setTimeout(() => setCopiedNumber(null), 2200);
   };
 
+  // Recalculate discount if applied coupon exists and subtotal changes
+  useEffect(() => {
+    if (appliedDiscount) {
+      const result = store.validateCoupon(appliedDiscount, subtotal);
+      if (result.valid) {
+        setDiscountAmount(result.discountAmount);
+      } else {
+        setAppliedDiscount(null);
+        setDiscountAmount(0);
+        setError(result.error || 'Coupon removed as order no longer satisfies requirements.');
+      }
+    }
+  }, [subtotal, appliedDiscount]);
+
   // Promo code apply
   const handleApplyPromo = () => {
     setError(null);
     const code = discountCode.trim().toUpperCase();
-    if (code === 'HYDEE1000') {
-      if (subtotal >= 5000) {
-        setAppliedDiscount('HYDEE1000');
-        setDiscountAmount(1000);
-      } else {
-        setError('Code HYDEE1000 requires a minimum order value of ৳5,000.');
-      }
-    } else if (code === 'PRIVILEGE10') {
-      setAppliedDiscount('PRIVILEGE10');
-      setDiscountAmount(Math.round(subtotal * 0.1));
+    if (!code) {
+      setError('Please enter a coupon code.');
+      return;
+    }
+    const result = store.validateCoupon(code, subtotal);
+    if (result.valid && result.coupon) {
+      setAppliedDiscount(result.coupon.code);
+      setDiscountAmount(result.discountAmount);
     } else {
-      setError('Invalid or expired discount code.');
+      setError(result.error || 'Invalid or expired discount code.');
     }
   };
 

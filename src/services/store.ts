@@ -2,6 +2,7 @@ import {
   AuditLog,
   CartItem,
   Category,
+  Coupon,
   DeliveryZone,
   HeroSlide,
   Order,
@@ -20,6 +21,50 @@ import {
   INITIAL_SITE_SETTINGS,
 } from './mockData';
 
+export const INITIAL_COUPONS: Coupon[] = [
+  {
+    id: 'coup-1',
+    code: 'HYDEE1000',
+    discountType: 'flat',
+    discountValue: 1000,
+    minOrderAmount: 5000,
+    isActive: true,
+    usageCount: 14,
+    description: 'Flat ৳1,000 off on orders of ৳5,000 or more',
+  },
+  {
+    id: 'coup-2',
+    code: 'PRIVILEGE10',
+    discountType: 'percentage',
+    discountValue: 10,
+    minOrderAmount: 0,
+    maxDiscountAmount: 3000,
+    isActive: true,
+    usageCount: 28,
+    description: '10% privilege discount for atelier clientele',
+  },
+  {
+    id: 'coup-3',
+    code: 'WELCOME500',
+    discountType: 'flat',
+    discountValue: 500,
+    minOrderAmount: 2000,
+    isActive: true,
+    usageCount: 42,
+    description: '৳500 instant welcome savings on orders over ৳2,000',
+  },
+  {
+    id: 'coup-4',
+    code: 'HYDEE5',
+    discountType: 'percentage',
+    discountValue: 5,
+    minOrderAmount: 0,
+    isActive: true,
+    usageCount: 9,
+    description: '5% instant discount on all silhouettes',
+  },
+];
+
 const STORAGE_KEYS = {
   PRODUCTS: 'hydee_products_v6',
   CATEGORIES: 'hydee_categories_v6',
@@ -29,6 +74,7 @@ const STORAGE_KEYS = {
   HERO: 'hydee_hero_v5',
   SETTINGS: 'hydee_settings_v2',
   PROMO: 'hydee_promo_v2',
+  COUPONS: 'hydee_coupons_v2',
   LOGS: 'hydee_logs_v2',
   ADMIN_AUTH: 'hydee_admin_authenticated',
 };
@@ -38,6 +84,7 @@ class StoreService {
   private categories: Category[] = [];
   private orders: Order[] = [];
   private cart: CartItem[] = [];
+  private coupons: Coupon[] = [];
   private zones: DeliveryZone[] = [];
   private heroSlides: HeroSlide[] = [];
   private settings: SiteSettings = INITIAL_SITE_SETTINGS;
@@ -86,6 +133,9 @@ class StoreService {
       const storedPromo = localStorage.getItem(STORAGE_KEYS.PROMO);
       this.promoPopup = storedPromo ? JSON.parse(storedPromo) : INITIAL_PROMO_POPUP;
 
+      const storedCoupons = localStorage.getItem(STORAGE_KEYS.COUPONS);
+      this.coupons = storedCoupons ? JSON.parse(storedCoupons) : INITIAL_COUPONS;
+
       const storedLogs = localStorage.getItem(STORAGE_KEYS.LOGS);
       this.auditLogs = storedLogs ? JSON.parse(storedLogs) : [];
     } catch (e) {
@@ -96,6 +146,7 @@ class StoreService {
       this.heroSlides = INITIAL_HERO_SLIDES;
       this.settings = INITIAL_SITE_SETTINGS;
       this.promoPopup = INITIAL_PROMO_POPUP;
+      this.coupons = INITIAL_COUPONS;
     }
   }
 
@@ -105,6 +156,7 @@ class StoreService {
       localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(this.categories));
       localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(this.orders));
       localStorage.setItem(STORAGE_KEYS.CART, JSON.stringify(this.cart));
+      localStorage.setItem(STORAGE_KEYS.COUPONS, JSON.stringify(this.coupons));
       localStorage.setItem(STORAGE_KEYS.ZONES, JSON.stringify(this.zones));
       localStorage.setItem(STORAGE_KEYS.HERO, JSON.stringify(this.heroSlides));
       localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(this.settings));
@@ -503,10 +555,14 @@ class StoreService {
 
     // 3. Discount calculation
     let discountAmount = 0;
-    if (payload.discountCode?.toUpperCase() === 'HYDEE1000' && subtotal >= 5000) {
-      discountAmount = 1000;
-    } else if (payload.discountCode?.toUpperCase() === 'PRIVILEGE10') {
-      discountAmount = Math.round(subtotal * 0.1);
+    let verifiedDiscountCode: string | undefined = undefined;
+    if (payload.discountCode && payload.discountCode.trim()) {
+      const couponCheck = this.validateCoupon(payload.discountCode.trim(), subtotal);
+      if (couponCheck.valid && couponCheck.coupon) {
+        discountAmount = couponCheck.discountAmount;
+        verifiedDiscountCode = couponCheck.coupon.code;
+        couponCheck.coupon.usageCount = (couponCheck.coupon.usageCount || 0) + 1;
+      }
     }
 
     const advanceDeliveryFee = zone.advanceFee;
@@ -757,6 +813,113 @@ class StoreService {
     this.promoPopup = popup;
     this.logAudit('Update Promotional Popup', 'Updated promotional modal configuration');
     this.persist();
+  }
+
+  // --- Coupon Codes & Campaigns ---
+  getCoupons(): Coupon[] {
+    return [...this.coupons];
+  }
+
+  getCouponById(id: string): Coupon | undefined {
+    return this.coupons.find((c) => c.id === id);
+  }
+
+  saveCoupon(couponData: Partial<Coupon> & { code: string; discountValue: number }): Coupon {
+    const cleanCode = couponData.code.trim().toUpperCase();
+    if (!cleanCode) throw new Error('Coupon code is required.');
+
+    const existingIndex = couponData.id
+      ? this.coupons.findIndex((c) => c.id === couponData.id)
+      : this.coupons.findIndex((c) => c.code.toUpperCase() === cleanCode);
+
+    let saved: Coupon;
+    if (existingIndex >= 0) {
+      saved = {
+        ...this.coupons[existingIndex],
+        ...couponData,
+        code: cleanCode,
+      };
+      this.coupons[existingIndex] = saved;
+      this.logAudit('Update Coupon', `Updated coupon code: ${cleanCode}`);
+    } else {
+      saved = {
+        id: `coup-${Date.now()}`,
+        code: cleanCode,
+        discountType: couponData.discountType || 'flat',
+        discountValue: Number(couponData.discountValue) || 0,
+        minOrderAmount: Number(couponData.minOrderAmount) || 0,
+        maxDiscountAmount: couponData.maxDiscountAmount ? Number(couponData.maxDiscountAmount) : undefined,
+        isActive: couponData.isActive !== false,
+        usageCount: 0,
+        description: couponData.description?.trim(),
+      };
+      this.coupons.unshift(saved);
+      this.logAudit('Create Coupon', `Created coupon code: ${cleanCode}`);
+    }
+
+    this.persist();
+    return saved;
+  }
+
+  deleteCoupon(id: string): boolean {
+    const prevLen = this.coupons.length;
+    this.coupons = this.coupons.filter((c) => c.id !== id);
+    if (this.coupons.length !== prevLen) {
+      this.logAudit('Delete Coupon', `Deleted coupon ${id}`);
+      this.persist();
+      return true;
+    }
+    return false;
+  }
+
+  toggleCouponStatus(id: string): boolean {
+    const coupon = this.coupons.find((c) => c.id === id);
+    if (coupon) {
+      coupon.isActive = !coupon.isActive;
+      this.logAudit('Toggle Coupon', `Coupon ${coupon.code} set to ${coupon.isActive ? 'Active' : 'Inactive'}`);
+      this.persist();
+      return true;
+    }
+    return false;
+  }
+
+  validateCoupon(
+    code: string,
+    subtotal: number
+  ): { valid: boolean; discountAmount: number; coupon?: Coupon; error?: string } {
+    if (!code || !code.trim()) {
+      return { valid: false, discountAmount: 0, error: 'Please enter a coupon code.' };
+    }
+    const cleanCode = code.trim().toUpperCase();
+    const coupon = this.coupons.find((c) => c.code.toUpperCase() === cleanCode);
+    if (!coupon) {
+      return { valid: false, discountAmount: 0, error: `Coupon "${cleanCode}" is invalid or expired.` };
+    }
+    if (!coupon.isActive) {
+      return { valid: false, discountAmount: 0, error: `Coupon "${cleanCode}" is currently inactive.` };
+    }
+    if (coupon.expiresAt && new Date(coupon.expiresAt) < new Date()) {
+      return { valid: false, discountAmount: 0, error: `Coupon "${cleanCode}" has expired.` };
+    }
+    if (coupon.minOrderAmount > 0 && subtotal < coupon.minOrderAmount) {
+      return {
+        valid: false,
+        discountAmount: 0,
+        error: `Coupon "${cleanCode}" requires a minimum order of ৳${coupon.minOrderAmount.toLocaleString()}. (Current order: ৳${subtotal.toLocaleString()})`,
+      };
+    }
+
+    let discountAmount = 0;
+    if (coupon.discountType === 'percentage') {
+      discountAmount = Math.round((subtotal * coupon.discountValue) / 100);
+      if (coupon.maxDiscountAmount && coupon.maxDiscountAmount > 0) {
+        discountAmount = Math.min(discountAmount, coupon.maxDiscountAmount);
+      }
+    } else {
+      discountAmount = Math.min(coupon.discountValue, subtotal);
+    }
+
+    return { valid: true, discountAmount, coupon };
   }
 
   // Reset database to initial pristine state

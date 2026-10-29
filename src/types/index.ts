@@ -160,6 +160,19 @@ export interface Order {
   }[];
 }
 
+export interface Coupon {
+  id: string;
+  code: string;
+  discountType: 'percentage' | 'flat';
+  discountValue: number; // e.g. 10 for 10% or 1000 for 1000 BDT
+  minOrderAmount: number; // e.g. 0 or 5000
+  maxDiscountAmount?: number; // optional cap for percentage
+  isActive: boolean;
+  expiresAt?: string;
+  usageCount: number;
+  description?: string;
+}
+
 export interface PromotionalPopup {
   isEnabled: boolean;
   title: string;
