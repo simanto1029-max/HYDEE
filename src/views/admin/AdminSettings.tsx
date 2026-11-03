@@ -147,7 +147,7 @@ export const AdminSettings: React.FC = () => {
       <div className="bg-white rounded-2xl border border-neutral-200 shadow-xs p-6 space-y-6">
         <h3 className="font-serif text-lg font-bold text-neutral-950 flex items-center gap-2">
           <Settings className="w-5 h-5 text-[#800000]" />
-          <span>Brand Identity & Contact Details</span>
+          <span>Brand Identity & Contact Details (Shown in Header & Footer)</span>
         </h3>
 
         <form onSubmit={handleSaveSettings} className="space-y-4 text-xs">
@@ -163,11 +163,12 @@ export const AdminSettings: React.FC = () => {
             </div>
 
             <div>
-              <label className="block font-semibold mb-1">WhatsApp Concierge Phone (Country code + number)</label>
+              <label className="block font-semibold mb-1">WhatsApp Concierge Number</label>
               <input
                 type="text"
                 value={settings.whatsappNumber}
                 onChange={(e) => setSettings({ ...settings, whatsappNumber: e.target.value })}
+                placeholder="8801700000000"
                 className="w-full p-3 border border-neutral-200 rounded-xl font-mono"
               />
               <span className="text-[10px] text-neutral-400 mt-0.5 block">Format: 88017XXXXXXXX</span>
@@ -176,34 +177,56 @@ export const AdminSettings: React.FC = () => {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block font-semibold mb-1">Customer Hotline Phone</label>
+              <label className="block font-semibold mb-1">Customer Helpline / Contact Phone</label>
               <input
                 type="text"
                 value={settings.hotlinePhone}
                 onChange={(e) => setSettings({ ...settings, hotlinePhone: e.target.value })}
+                placeholder="+880 1700-000000"
                 className="w-full p-3 border border-neutral-200 rounded-xl"
               />
             </div>
 
             <div>
-              <label className="block font-semibold mb-1">Concierge Email</label>
+              <label className="block font-semibold mb-1">Official Support Email</label>
               <input
                 type="email"
                 value={settings.supportEmail}
                 onChange={(e) => setSettings({ ...settings, supportEmail: e.target.value })}
+                placeholder="support@hydee.com"
                 className="w-full p-3 border border-neutral-200 rounded-xl"
               />
             </div>
           </div>
 
-          <div>
-            <label className="block font-semibold mb-1">Dhaka Atelier Address</label>
-            <input
-              type="text"
-              value={settings.address}
-              onChange={(e) => setSettings({ ...settings, address: e.target.value })}
-              className="w-full p-3 border border-neutral-200 rounded-xl"
-            />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block font-semibold mb-1">Tangail Location / Atelier Address *</label>
+              <input
+                type="text"
+                value={settings.tangailLocation || settings.address}
+                onChange={(e) =>
+                  setSettings({
+                    ...settings,
+                    tangailLocation: e.target.value,
+                    address: e.target.value,
+                  })
+                }
+                placeholder="Main Atelier, Tangail, Dhaka Division, Bangladesh"
+                className="w-full p-3 border border-neutral-200 rounded-xl"
+              />
+              <span className="text-[10px] text-neutral-400 mt-0.5 block">Displayed prominently in header and footer</span>
+            </div>
+
+            <div>
+              <label className="block font-semibold mb-1">Brand Tagline</label>
+              <input
+                type="text"
+                value={settings.tagline}
+                onChange={(e) => setSettings({ ...settings, tagline: e.target.value })}
+                className="w-full p-3 border border-neutral-200 rounded-xl"
+              />
+            </div>
           </div>
 
           {/* Announcement Bar */}
@@ -234,9 +257,74 @@ export const AdminSettings: React.FC = () => {
           <div className="pt-2 flex justify-end">
             <button
               type="submit"
-              className="bg-[#800000] hover:bg-[#5c0000] text-white px-6 py-3 rounded-xl font-semibold uppercase tracking-wider"
+              className="bg-[#800000] hover:bg-[#5c0000] text-white px-6 py-3 rounded-xl font-semibold uppercase tracking-wider cursor-pointer"
             >
               Update Atelier Settings
+            </button>
+          </div>
+        </form>
+      </div>
+
+      {/* Admin Login Credentials & Security Card */}
+      <div className="bg-white rounded-2xl border border-neutral-200 shadow-xs p-6 space-y-4">
+        <div className="flex items-center justify-between pb-3 border-b border-neutral-100">
+          <div className="flex items-center space-x-2">
+            <ShieldCheck className="w-5 h-5 text-[#800000]" />
+            <h3 className="font-serif text-lg font-bold text-neutral-950">
+              Admin Portal Security & Login Credentials
+            </h3>
+          </div>
+          <span className="text-[10px] font-bold uppercase tracking-wider bg-neutral-100 text-neutral-700 px-2.5 py-1 rounded-md">
+            Private Access
+          </span>
+        </div>
+
+        <p className="text-xs text-neutral-600">
+          Update the staff email and security password used to log in at <code>/admin</code>. These credentials are completely private and never visible to customers.
+        </p>
+
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            store.updateAdminCredentials(settings.adminEmail, settings.adminPassword);
+            setSavedNotice('Admin security credentials updated successfully.');
+            setTimeout(() => setSavedNotice(null), 3000);
+          }}
+          className="space-y-4 text-xs"
+        >
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block font-semibold mb-1">Admin Login Email</label>
+              <input
+                type="email"
+                required
+                value={settings.adminEmail || 'admin@hydee.com'}
+                onChange={(e) => setSettings({ ...settings, adminEmail: e.target.value })}
+                className="w-full p-3 border border-neutral-200 rounded-xl font-semibold"
+              />
+            </div>
+
+            <div>
+              <label className="block font-semibold mb-1">Admin Security Password</label>
+              <input
+                type="text"
+                required
+                value={settings.adminPassword || 'hydee2026'}
+                onChange={(e) => setSettings({ ...settings, adminPassword: e.target.value })}
+                className="w-full p-3 border border-neutral-200 rounded-xl font-mono font-semibold"
+              />
+              <span className="text-[10px] text-neutral-400 mt-0.5 block">
+                Set any custom password of your choice
+              </span>
+            </div>
+          </div>
+
+          <div className="pt-2 flex justify-end">
+            <button
+              type="submit"
+              className="bg-neutral-900 hover:bg-black text-white px-6 py-3 rounded-xl font-semibold uppercase tracking-wider cursor-pointer"
+            >
+              Save New Admin Password
             </button>
           </div>
         </form>

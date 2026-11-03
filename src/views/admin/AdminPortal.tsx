@@ -16,8 +16,8 @@ import {
 import { store } from '../../services/store';
 import { AdminDashboard } from './AdminDashboard';
 import { AdminProducts } from './AdminProducts';
+import { AdminCategories } from './AdminCategories';
 import { AdminOrders } from './AdminOrders';
-import { AdminHomepage } from './AdminHomepage';
 import { AdminMarketing } from './AdminMarketing';
 import { AdminSettings } from './AdminSettings';
 
@@ -31,11 +31,11 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   onNavigateToProduct,
 }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(store.isAdminLoggedIn());
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'products' | 'orders' | 'homepage' | 'marketing' | 'settings'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'products' | 'categories' | 'orders' | 'marketing' | 'settings'>('dashboard');
 
-  // Login form state
-  const [email, setEmail] = useState('admin@hydee.com');
-  const [password, setPassword] = useState('hydee2026');
+  // Login form state (Blank by default for security)
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -46,12 +46,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     e.preventDefault();
     setLoginError(null);
 
-    // Secure verification
-    if (
-      (email === 'admin@hydee.com' && password === 'hydee2026') ||
-      password === 'hydee2026' ||
-      password === 'admin'
-    ) {
+    // Secure verification against configured admin credentials
+    if (store.verifyAdminCredentials(email, password)) {
       store.setAdminLoggedIn(true);
       setIsAuthenticated(true);
     } else {
@@ -115,14 +111,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
               />
             </div>
 
-            <div className="p-3 bg-neutral-50 rounded-xl border border-neutral-100 text-[11px] text-neutral-500">
-              <span className="font-semibold text-neutral-800 block">Default Studio Credentials:</span>
-              <span>Email: <code>admin@hydee.com</code> · Password: <code>hydee2026</code></span>
-            </div>
-
             <button
               type="submit"
-              className="w-full bg-[#800000] hover:bg-[#5c0000] text-white py-4 rounded-xl font-semibold uppercase tracking-wider text-xs transition-colors shadow-md"
+              className="w-full bg-[#800000] hover:bg-[#5c0000] text-white py-4 rounded-xl font-semibold uppercase tracking-wider text-xs transition-colors shadow-md cursor-pointer"
             >
               Authenticate & Enter Studio
             </button>
@@ -131,7 +122,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           <div className="pt-2 text-center">
             <button
               onClick={onNavigateHome}
-              className="text-xs text-neutral-400 hover:text-neutral-700"
+              className="text-xs text-neutral-400 hover:text-neutral-700 cursor-pointer"
             >
               ← Return to Public Storefront
             </button>
@@ -144,8 +135,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   const tabs = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'products', label: 'Products & 360', icon: ShoppingBag },
+    { id: 'categories', label: 'Categories & Catalog', icon: Layers },
     { id: 'orders', label: 'Orders & COD', icon: Package },
-    { id: 'homepage', label: 'Hero & Hanger', icon: Sparkles },
     { id: 'marketing', label: 'Promotions & Pixel', icon: Tag },
     { id: 'settings', label: 'Delivery & Settings', icon: Settings },
   ];
@@ -164,7 +155,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
         <div className="flex items-center space-x-4">
           <button
             onClick={onNavigateHome}
-            className="hidden sm:inline-flex items-center space-x-1.5 text-xs text-neutral-300 hover:text-white transition-colors"
+            className="hidden sm:inline-flex items-center space-x-1.5 text-xs text-neutral-300 hover:text-white transition-colors cursor-pointer"
           >
             <span>Live Boutique</span>
             <ExternalLink className="w-3.5 h-3.5" />
@@ -172,7 +163,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
 
           <button
             onClick={handleLogout}
-            className="inline-flex items-center space-x-1 text-xs text-neutral-400 hover:text-red-400 transition-colors"
+            className="inline-flex items-center space-x-1 text-xs text-neutral-400 hover:text-red-400 transition-colors cursor-pointer"
           >
             <LogOut className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Sign Out</span>
@@ -191,7 +182,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as any)}
-                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-xs font-semibold tracking-wider transition-all ${
+                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-xs font-semibold tracking-wider transition-all cursor-pointer ${
                   isActive
                     ? 'bg-[#800000] text-white shadow-sm'
                     : 'text-neutral-700 hover:bg-neutral-100 hover:text-neutral-950'
@@ -213,7 +204,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as any)}
-                className={`flex items-center space-x-1.5 px-3 py-2 rounded-lg text-xs whitespace-nowrap font-semibold ${
+                className={`flex items-center space-x-1.5 px-3 py-2 rounded-lg text-xs whitespace-nowrap font-semibold cursor-pointer ${
                   isActive ? 'bg-[#800000] text-white' : 'bg-white text-neutral-700 border border-neutral-200'
                 }`}
               >
@@ -228,8 +219,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
         <main className="flex-1 min-w-0">
           {activeTab === 'dashboard' && <AdminDashboard onNavigateTab={(t) => setActiveTab(t as any)} />}
           {activeTab === 'products' && <AdminProducts onNavigateToProduct={onNavigateToProduct} />}
+          {activeTab === 'categories' && <AdminCategories />}
           {activeTab === 'orders' && <AdminOrders />}
-          {activeTab === 'homepage' && <AdminHomepage />}
           {activeTab === 'marketing' && <AdminMarketing />}
           {activeTab === 'settings' && <AdminSettings />}
         </main>

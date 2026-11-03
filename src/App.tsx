@@ -185,10 +185,10 @@ export default function App() {
     if (currentPath === '/legal/deposit') {
       return <LegalView policyType="deposit" onNavigate={navigate} />;
     }
-    if (currentPath === '/legal/privacy') {
+    if (currentPath === '/legal/privacy' || currentPath === '/privacy-policy') {
       return <LegalView policyType="privacy" onNavigate={navigate} />;
     }
-    if (currentPath === '/legal/terms') {
+    if (currentPath === '/legal/terms' || currentPath === '/terms' || currentPath === '/terms-and-conditions') {
       return <LegalView policyType="terms" onNavigate={navigate} />;
     }
 
@@ -207,7 +207,7 @@ export default function App() {
   const isAdminView = currentPath.startsWith('/admin');
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#FAF9F7] text-neutral-900 selection:bg-[#800000] selection:text-white pb-16 sm:pb-12">
+    <div className="min-h-screen flex flex-col bg-[#FAF9F7] text-neutral-900 selection:bg-[#800000] selection:text-white pb-16 md:pb-0">
       {/* Header only for public store views */}
       {!isAdminView && (
         <Header
@@ -235,8 +235,8 @@ export default function App() {
         />
       )}
 
-      {/* Floating VIP Stylist Concierge Widget */}
-      {!isAdminView && <FloatingConcierge />}
+      {/* Floating VIP Stylist Concierge Widget (Hidden on checkout for clean mobile view) */}
+      {!isAdminView && currentPath !== '/checkout' && <FloatingConcierge />}
 
       {/* Slide-over Cart Drawer */}
       <CartDrawer

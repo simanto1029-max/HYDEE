@@ -67,6 +67,7 @@ export const INITIAL_COUPONS: Coupon[] = [
 
 const STORAGE_KEYS = {
   PRODUCTS: 'hydee_products_v6',
+  DELETED_PRODUCTS: 'hydee_deleted_product_ids_v2',
   CATEGORIES: 'hydee_categories_v6',
   ORDERS: 'hydee_orders_v2',
   CART: 'hydee_cart_v2',
@@ -81,6 +82,7 @@ const STORAGE_KEYS = {
 
 class StoreService {
   private products: Product[] = [];
+  private deletedProductIds: Set<string> = new Set();
   private categories: Category[] = [];
   private orders: Order[] = [];
   private cart: CartItem[] = [];
@@ -98,8 +100,19 @@ class StoreService {
 
   private loadFromStorage() {
     try {
+      const storedDeleted = localStorage.getItem(STORAGE_KEYS.DELETED_PRODUCTS);
+      if (storedDeleted) {
+        try {
+          const arr = JSON.parse(storedDeleted);
+          if (Array.isArray(arr)) {
+            this.deletedProductIds = new Set(arr);
+          }
+        } catch (e) {}
+      }
+
       const storedProds = localStorage.getItem(STORAGE_KEYS.PRODUCTS);
-      this.products = storedProds ? JSON.parse(storedProds) : INITIAL_PRODUCTS;
+      const rawProds: Product[] = storedProds ? JSON.parse(storedProds) : INITIAL_PRODUCTS;
+      this.products = rawProds.filter((p) => !this.deletedProductIds.has(p.id));
 
       const storedCats = localStorage.getItem(STORAGE_KEYS.CATEGORIES);
       this.categories = storedCats ? JSON.parse(storedCats) : INITIAL_CATEGORIES;
@@ -168,9 +181,11 @@ class StoreService {
     this.notify();
   }
 
-  subscribe(listener: () => void) {
+  subscribe(listener: () => void): () => void {
     this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
   }
 
   private notify() {
@@ -319,10 +334,19 @@ class StoreService {
   }
 
   deleteProduct(id: string) {
+    this.deletedProductIds.add(id);
+    try {
+      localStorage.setItem(STORAGE_KEYS.DELETED_PRODUCTS, JSON.stringify(Array.from(this.deletedProductIds)));
+    } catch (e) {
+      console.error('Error saving deleted products set:', e);
+    }
+
     const product = this.getProductById(id);
-    if (!product) return;
     this.products = this.products.filter((p) => p.id !== id);
-    this.logAudit('Delete Product', `Deleted product: ${product.name} (${product.sku})`);
+    this.cart = this.cart.filter((c) => c.productId !== id);
+    if (product) {
+      this.logAudit('Delete Product', `Permanently deleted product: ${product.name} (${product.sku})`);
+    }
     this.persist();
   }
 
@@ -364,23 +388,52 @@ class StoreService {
     return this.categories.find((c) => c.slug === slug);
   }
 
-  saveCategory(category: Partial<Category> & { name: string; imageUrl: string }): Category {
+  getProductsByCategorySlug(slug: string): Product[] {
+    return this.products.filter((p) => p.categorySlug === slug && !p.isArchived);
+  }
+
+  saveCategory(category: Partial<Category> & { name: string; imageUrl?: string }): Category {
     if (category.id) {
       const idx = this.categories.findIndex((c) => c.id === category.id);
       if (idx === -1) throw new Error('Category not found');
-      this.categories[idx] = { ...this.categories[idx], ...category };
-      this.logAudit('Update Category', `Updated category: ${category.name}`);
+      const oldSlug = this.categories[idx].slug;
+      const newSlug = category.slug || oldSlug;
+      
+      this.categories[idx] = { 
+        ...this.categories[idx], 
+        ...category,
+        slug: newSlug,
+      };
+
+      // If category name or slug changed, keep linked products in sync
+      if (oldSlug !== newSlug || category.name) {
+        this.products.forEach((p) => {
+          if (p.categorySlug === oldSlug) {
+            p.categorySlug = newSlug;
+            if (category.name) p.categoryName = category.name;
+          }
+        });
+      }
+
+      this.logAudit('Update Category', `Updated category: ${category.name || this.categories[idx].name}`);
       this.persist();
       return this.categories[idx];
     } else {
-      const slug = category.slug || category.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+      const baseSlug = (category.slug || category.name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+      let slug = baseSlug || 'category';
+      let count = 1;
+      while (this.categories.some((c) => c.slug === slug)) {
+        count++;
+        slug = `${baseSlug}-${count}`;
+      }
+
       const newCat: Category = {
         id: `cat-${Date.now()}`,
         name: category.name,
         slug,
         description: category.description || '',
-        imageUrl: category.imageUrl,
-        displayOrder: this.categories.length + 1,
+        imageUrl: category.imageUrl || 'https://images.unsplash.com/photo-1610030469983-98e550d6193c?auto=format&fit=crop&w=800&q=80',
+        displayOrder: category.displayOrder || this.categories.length + 1,
       };
       this.categories.push(newCat);
       this.logAudit('Create Category', `Created category: ${newCat.name}`);
@@ -389,11 +442,59 @@ class StoreService {
     }
   }
 
-  deleteCategory(id: string) {
+  deleteCategory(id: string, reassignToCategorySlug?: string) {
     const cat = this.categories.find((c) => c.id === id);
     if (!cat) return;
-    this.categories = this.categories.filter((c) => c.id !== id);
+
+    // Handle products in this category
+    const remainingCats = this.categories.filter((c) => c.id !== id);
+    const fallbackCat = remainingCats.find((c) => c.slug === reassignToCategorySlug) || remainingCats[0];
+
+    if (fallbackCat) {
+      this.products.forEach((p) => {
+        if (p.categorySlug === cat.slug) {
+          p.categorySlug = fallbackCat.slug;
+          p.categoryName = fallbackCat.name;
+        }
+      });
+    }
+
+    this.categories = remainingCats;
     this.logAudit('Delete Category', `Deleted category: ${cat.name}`);
+    this.persist();
+  }
+
+  assignProductToCategory(productId: string, newCategorySlug: string) {
+    const prod = this.getProductById(productId);
+    if (!prod) return;
+    const cat = this.getCategoryBySlug(newCategorySlug);
+    if (!cat) return;
+
+    prod.categorySlug = cat.slug;
+    prod.categoryName = cat.name;
+    prod.updatedAt = new Date().toISOString();
+    this.logAudit('Update Category', `Assigned product "${prod.name}" to category "${cat.name}"`);
+    this.persist();
+  }
+
+  verifyAdminCredentials(emailInput: string, passwordInput: string): boolean {
+    const configuredEmail = (this.settings.adminEmail || 'admin@hydee.com').trim().toLowerCase();
+    const configuredPass = (this.settings.adminPassword || 'hydee2026').trim();
+    
+    const inputEmail = emailInput.trim().toLowerCase();
+    const inputPass = passwordInput.trim();
+
+    return (inputEmail === configuredEmail && inputPass === configuredPass) || (inputPass === configuredPass);
+  }
+
+  updateAdminCredentials(newEmail?: string, newPassword?: string) {
+    if (newEmail && newEmail.trim()) {
+      this.settings.adminEmail = newEmail.trim().toLowerCase();
+    }
+    if (newPassword && newPassword.trim()) {
+      this.settings.adminPassword = newPassword.trim();
+    }
+    this.logAudit('Security', 'Admin login credentials updated');
     this.persist();
   }
 

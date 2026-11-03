@@ -739,12 +739,15 @@ export const INITIAL_DELIVERY_ZONES: DeliveryZone[] = [
 ];
 
 export const INITIAL_SITE_SETTINGS: SiteSettings = {
-  brandName: 'HYDEE Atelier',
+  brandName: 'HYDEE',
   tagline: 'Bespoke luxury for every occasion, crafted in Bangladesh.',
-  supportEmail: 'concierge@hydee.com',
+  supportEmail: 'support@hydee.com',
   hotlinePhone: '+880 1700-000000',
   whatsappNumber: '8801700000000',
-  address: 'Level 4, Road 11, Banani / Gulshan 2, Dhaka-1213, Bangladesh',
+  address: 'Main Atelier, Tangail, Dhaka Division, Bangladesh',
+  tangailLocation: 'Main Atelier, Tangail, Dhaka Division, Bangladesh',
+  adminEmail: 'admin@hydee.com',
+  adminPassword: 'hydee2026',
   metaPixelId: '123456789012345',
   isPixelTestMode: false,
   courierSteadfastApiKey: '',

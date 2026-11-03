@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { ShoppingBag, Menu, X, ArrowRight, Sparkles } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { ShoppingBag, Menu, X, ArrowRight, MessageCircle } from 'lucide-react';
 import { store } from '../services/store';
 
 interface HeaderProps {
@@ -17,20 +17,38 @@ export const Header: React.FC<HeaderProps> = ({
   cartCount,
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const settings = store.getSettings();
-  const categories = store.getCategories();
+  const [settings, setSettings] = useState(store.getSettings());
+  const [categories, setCategories] = useState(store.getCategories());
+
+  useEffect(() => {
+    const unsub = store.subscribe(() => {
+      setSettings(store.getSettings());
+      setCategories(store.getCategories());
+    });
+    return () => {
+      unsub();
+    };
+  }, []);
+
+  const cleanWhatsapp = (settings.whatsappNumber || '8801700000000').replace(/[^0-9]/g, '');
+
+  const handleWhatsAppChat = () => {
+    const text = encodeURIComponent('Hello HYDEE Atelier! I would like personal styling and bespoke order assistance.');
+    window.open(`https://wa.me/${cleanWhatsapp}?text=${text}`, '_blank');
+  };
 
   return (
     <>
+      {/* Main Header Bar: [Hamburger Icon] — [HYDEE Logo] — [Shopping Bag Icon] */}
       <header
         className={`bg-white border-b border-neutral-100/90 transition-all duration-200 z-40 ${
           settings.stickyHeader ? 'sticky top-0' : 'relative'
         }`}
       >
-        <div className="max-w-7xl mx-auto px-4 sm:px-8 py-3.5">
-          {/* Top Row: [Menu] — [HYDEE] — [Bag with Badge] */}
+        <div className="max-w-7xl mx-auto px-4 sm:px-8 py-3 sm:py-3.5">
           <div className="flex items-center justify-between h-12 sm:h-14">
-            {/* Left: Hamburger menu toggle */}
+            
+            {/* Left: Pure Hamburger Icon Button (No extra text) */}
             <button
               type="button"
               onClick={() => setMobileMenuOpen(true)}
@@ -40,11 +58,11 @@ export const Header: React.FC<HeaderProps> = ({
               <Menu className="w-6 h-6 stroke-[1.8]" />
             </button>
 
-            {/* Center: Serif Brand Wordmark in Deep Maroon */}
+            {/* Center: Serif Brand Wordmark */}
             <button
               type="button"
               onClick={() => onNavigate('/')}
-              className="font-serif text-2xl sm:text-3xl font-bold tracking-[0.2em] text-[#800000] hover:opacity-90 transition-opacity cursor-pointer text-center"
+              className="font-serif text-2xl sm:text-3xl font-bold tracking-[0.22em] text-[#800000] hover:opacity-90 transition-opacity cursor-pointer text-center"
             >
               HYDEE
             </button>
@@ -67,7 +85,7 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       </header>
 
-      {/* Slide-out Navigation Drawer when Hamburger is clicked */}
+      {/* Slide-out Navigation Drawer (Matches User Screenshot 2 Exactly) */}
       {mobileMenuOpen && (
         <div className="fixed inset-0 z-50 flex">
           {/* Backdrop */}
@@ -95,6 +113,8 @@ export const Header: React.FC<HeaderProps> = ({
 
             {/* Navigation Links */}
             <div className="flex-1 overflow-y-auto px-5 py-6 space-y-6">
+              
+              {/* STORE NAVIGATION */}
               <div>
                 <span className="text-[10px] font-bold tracking-[0.2em] text-neutral-400 uppercase block mb-3">
                   Store Navigation
@@ -106,8 +126,8 @@ export const Header: React.FC<HeaderProps> = ({
                       onNavigate('/');
                       setMobileMenuOpen(false);
                     }}
-                    className={`w-full flex items-center justify-between py-2.5 px-3 rounded-lg text-sm font-medium transition-colors ${
-                      currentPath === '/' ? 'bg-neutral-100 text-neutral-950' : 'text-neutral-700 hover:bg-neutral-50'
+                    className={`w-full flex items-center justify-between py-2.5 px-3 rounded-lg text-sm font-medium transition-colors cursor-pointer ${
+                      currentPath === '/' ? 'bg-neutral-100 text-neutral-950 font-semibold' : 'text-neutral-700 hover:bg-neutral-50'
                     }`}
                   >
                     <span>Home</span>
@@ -120,8 +140,8 @@ export const Header: React.FC<HeaderProps> = ({
                       onNavigate('/products');
                       setMobileMenuOpen(false);
                     }}
-                    className={`w-full flex items-center justify-between py-2.5 px-3 rounded-lg text-sm font-medium transition-colors ${
-                      currentPath === '/products' ? 'bg-neutral-100 text-neutral-950' : 'text-neutral-700 hover:bg-neutral-50'
+                    className={`w-full flex items-center justify-between py-2.5 px-3 rounded-lg text-sm font-medium transition-colors cursor-pointer ${
+                      currentPath === '/products' ? 'bg-neutral-100 text-neutral-950 font-semibold' : 'text-neutral-700 hover:bg-neutral-50'
                     }`}
                   >
                     <span>Shop All Collections</span>
@@ -134,8 +154,8 @@ export const Header: React.FC<HeaderProps> = ({
                       onNavigate('/track-order');
                       setMobileMenuOpen(false);
                     }}
-                    className={`w-full flex items-center justify-between py-2.5 px-3 rounded-lg text-sm font-medium transition-colors ${
-                      currentPath === '/track-order' ? 'bg-neutral-100 text-neutral-950' : 'text-neutral-700 hover:bg-neutral-50'
+                    className={`w-full flex items-center justify-between py-2.5 px-3 rounded-lg text-sm font-medium transition-colors cursor-pointer ${
+                      currentPath === '/track-order' ? 'bg-neutral-100 text-neutral-950 font-semibold' : 'text-neutral-700 hover:bg-neutral-50'
                     }`}
                   >
                     <span>Track Order</span>
@@ -144,7 +164,7 @@ export const Header: React.FC<HeaderProps> = ({
                 </nav>
               </div>
 
-              {/* Collections by Category */}
+              {/* CATEGORIES */}
               <div>
                 <span className="text-[10px] font-bold tracking-[0.2em] text-neutral-400 uppercase block mb-3">
                   Categories
@@ -158,7 +178,7 @@ export const Header: React.FC<HeaderProps> = ({
                         onNavigate(`/categories/${cat.slug}`);
                         setMobileMenuOpen(false);
                       }}
-                      className="text-left px-3 py-2 text-xs font-medium text-neutral-700 hover:text-[#800000] bg-neutral-50 hover:bg-neutral-100 rounded-lg transition-colors"
+                      className="text-left px-3 py-2 text-xs font-medium text-neutral-700 hover:text-[#800000] bg-neutral-50 hover:bg-neutral-100 rounded-lg transition-colors cursor-pointer truncate"
                     >
                       {cat.name}
                     </button>
@@ -166,16 +186,19 @@ export const Header: React.FC<HeaderProps> = ({
                 </div>
               </div>
 
-              {/* Customer Care info */}
+              {/* WhatsApp Concierge Button & Admin Link */}
               <div className="pt-4 border-t border-neutral-100 space-y-3">
-                <a
-                  href="https://wa.me/8801700000000"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-emerald-50 text-emerald-800 text-xs font-semibold hover:bg-emerald-100 transition-colors"
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleWhatsAppChat();
+                    setMobileMenuOpen(false);
+                  }}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-emerald-50 text-emerald-800 text-xs font-semibold hover:bg-emerald-100 transition-colors border border-emerald-200 cursor-pointer"
                 >
+                  <MessageCircle className="w-4 h-4 text-emerald-600" />
                   <span>Chat on WhatsApp</span>
-                </a>
+                </button>
 
                 <button
                   type="button"
@@ -183,11 +206,12 @@ export const Header: React.FC<HeaderProps> = ({
                     onNavigate('/admin');
                     setMobileMenuOpen(false);
                   }}
-                  className="w-full text-center py-2 text-[11px] text-neutral-400 hover:text-neutral-600 transition-colors"
+                  className="w-full text-center py-2 text-[11px] text-neutral-400 hover:text-neutral-600 transition-colors cursor-pointer"
                 >
                   Atelier Admin Portal
                 </button>
               </div>
+
             </div>
           </div>
         </div>

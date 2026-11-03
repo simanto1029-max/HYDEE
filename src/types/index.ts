@@ -206,6 +206,9 @@ export interface SiteSettings {
   supportEmail: string;
   hotlinePhone: string;
   address: string;
+  tangailLocation?: string;
+  adminEmail?: string;
+  adminPassword?: string;
   metaPixelId?: string;
   isPixelTestMode: boolean;
   courierSteadfastApiKey?: string;

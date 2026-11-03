@@ -14,7 +14,7 @@ export const FloatingConcierge: React.FC = () => {
   return (
     <>
       {/* Floating Circular Icon Button (Clean & text-free as requested) */}
-      <div className="fixed bottom-20 sm:bottom-22 right-4 sm:right-6 z-30 flex items-center">
+      <div className="fixed bottom-20 md:bottom-6 right-4 sm:right-6 z-30 flex items-center">
         <button
           onClick={() => setIsOpen(!isOpen)}
           className="w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-[#800000] hover:bg-[#5c0000] text-white flex items-center justify-center shadow-[0_8px_25px_rgba(128,0,0,0.35)] border-2 border-white transition-all duration-300 hover:scale-110 active:scale-95 cursor-pointer group"

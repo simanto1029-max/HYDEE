@@ -288,11 +288,11 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
   }
 
   return (
-    <div className="bg-[#FFFFFF] min-h-screen py-8 sm:py-12 text-black font-sans">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div className="bg-[#FFFFFF] min-h-screen py-5 sm:py-12 text-black font-sans pb-24 sm:pb-12">
+      <div className="max-w-6xl mx-auto px-3.5 sm:px-6 lg:px-8">
         
         {/* Top Breadcrumb Navigation */}
-        <div className="mb-6">
+        <div className="mb-5 sm:mb-6">
           <button
             type="button"
             onClick={() => onNavigate('/products')}
@@ -311,10 +311,10 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
         )}
 
         {/* 2-Column Grid */}
-        <form onSubmit={handleSubmitCheckout} className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-start">
+        <form onSubmit={handleSubmitCheckout} className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-12 items-start">
           
           {/* LEFT COLUMN: Recipient Information & 2 Payment Options */}
-          <div className="lg:col-span-7 space-y-8">
+          <div className="lg:col-span-7 space-y-6 sm:space-y-8 min-w-0">
             
             {/* Section 1: Check Out Your Items */}
             <div>
@@ -440,11 +440,11 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
 
             {/* Section 2: Payment Method (Only 2 clean options on the main page) */}
             <div className="pt-2">
-              <div className="flex items-center justify-between mb-1">
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
                 <h2 className="text-xl sm:text-2xl font-bold text-black tracking-tight">
                   Payment Method
                 </h2>
-                <span className="text-[11px] font-bold text-black uppercase tracking-wider bg-neutral-100 px-2.5 py-1 rounded-md">
+                <span className="text-[10px] sm:text-[11px] font-bold text-black uppercase tracking-wider bg-neutral-100 px-2.5 py-1 rounded-md">
                   2 Options Available
                 </span>
               </div>
@@ -458,22 +458,22 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                 {/* OPTION 1: Cash on Delivery (Advance Courier Fee Required) */}
                 <div
                   onClick={() => setPaymentType('advance_cod')}
-                  className={`border rounded-xl p-4 flex items-start justify-between cursor-pointer transition-all ${
+                  className={`border rounded-2xl p-3.5 sm:p-4 flex items-center justify-between cursor-pointer transition-all ${
                     paymentType === 'advance_cod'
                       ? 'border-2 border-black bg-neutral-50 shadow-xs'
                       : 'border-neutral-300 bg-white hover:border-black'
                   }`}
                 >
-                  <div className="flex items-start gap-3">
+                  <div className="flex items-start gap-3 flex-1 min-w-0 mr-3">
                     <div className="w-9 h-9 rounded-lg bg-neutral-100 flex items-center justify-center text-black shrink-0 mt-0.5">
                       <Banknote className="w-5 h-5 text-black" />
                     </div>
-                    <div>
-                      <div className="flex items-center gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                         <span className="text-xs sm:text-sm font-bold text-black">
                           Cash On Delivery
                         </span>
-                        <span className="text-[10px] font-bold bg-[#800000] text-white px-2 py-0.5 rounded-full uppercase tracking-wider">
+                        <span className="inline-flex shrink-0 text-[9px] sm:text-[10px] font-bold bg-[#800000] text-white px-2 py-0.5 rounded-full uppercase tracking-wider">
                           Advance Courier Fee
                         </span>
                       </div>
@@ -483,7 +483,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                     </div>
                   </div>
                   <div
-                    className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 mt-1 ${
+                    className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${
                       paymentType === 'advance_cod'
                         ? 'border-black bg-black'
                         : 'border-neutral-400'
@@ -498,22 +498,22 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                 {/* OPTION 2: Full Payment (100% Pre-paid) */}
                 <div
                   onClick={() => setPaymentType('full_prepaid')}
-                  className={`border rounded-xl p-4 flex items-start justify-between cursor-pointer transition-all ${
+                  className={`border rounded-2xl p-3.5 sm:p-4 flex items-center justify-between cursor-pointer transition-all ${
                     paymentType === 'full_prepaid'
                       ? 'border-2 border-black bg-neutral-50 shadow-xs'
                       : 'border-neutral-300 bg-white hover:border-black'
                   }`}
                 >
-                  <div className="flex items-start gap-3">
+                  <div className="flex items-start gap-3 flex-1 min-w-0 mr-3">
                     <div className="w-9 h-9 rounded-lg bg-neutral-100 flex items-center justify-center text-black shrink-0 mt-0.5">
                       <ShieldCheck className="w-5 h-5 text-black" />
                     </div>
-                    <div>
-                      <div className="flex items-center gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                         <span className="text-xs sm:text-sm font-bold text-black">
                           Full Payment (100% Pre-paid)
                         </span>
-                        <span className="text-[10px] font-bold bg-neutral-900 text-white px-2 py-0.5 rounded-full uppercase tracking-wider">
+                        <span className="inline-flex shrink-0 text-[9px] sm:text-[10px] font-bold bg-neutral-900 text-white px-2 py-0.5 rounded-full uppercase tracking-wider">
                           0% COD At Doorstep
                         </span>
                       </div>
@@ -523,7 +523,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                     </div>
                   </div>
                   <div
-                    className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 mt-1 ${
+                    className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${
                       paymentType === 'full_prepaid'
                         ? 'border-black bg-black'
                         : 'border-neutral-400'
@@ -539,7 +539,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
           </div>
 
           {/* RIGHT COLUMN: Current Order Summary */}
-          <div className="lg:col-span-5 sticky top-8">
+          <div className="lg:col-span-5 lg:sticky lg:top-8 mt-6 lg:mt-0 min-w-0">
             <div className="bg-[#F9FAFB] rounded-3xl p-5 sm:p-7 border border-neutral-300 shadow-2xs space-y-5">
               
               {/* Header */}
@@ -810,7 +810,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                 <span className="block text-[11px] uppercase font-bold text-black tracking-wider mb-2">
                   Select Transfer Channel:
                 </span>
-                <div className="grid grid-cols-2 gap-2.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   {/* bKash Button */}
                   <button
                     type="button"
@@ -822,12 +822,12 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                     }`}
                   >
                     <div className="flex items-center gap-2">
-                      <span className="w-5 h-5 rounded-md bg-[#e2136e] text-white flex items-center justify-center text-[10px] font-bold">
+                      <span className="w-5 h-5 rounded-md bg-[#e2136e] text-white flex items-center justify-center text-[10px] font-bold shrink-0">
                         b
                       </span>
                       <span className="text-black font-bold">bKash</span>
                     </div>
-                    <span className="text-[10px] text-black font-semibold">01700-000000</span>
+                    <span className="text-[11px] font-mono text-black font-semibold">01700-000000</span>
                   </button>
 
                   {/* Nagad Button */}
@@ -841,18 +841,18 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                     }`}
                   >
                     <div className="flex items-center gap-2">
-                      <span className="w-5 h-5 rounded-md bg-[#f7941d] text-white flex items-center justify-center text-[10px] font-bold">
+                      <span className="w-5 h-5 rounded-md bg-[#f7941d] text-white flex items-center justify-center text-[10px] font-bold shrink-0">
                         N
                       </span>
                       <span className="text-black font-bold">Nagad</span>
                     </div>
-                    <span className="text-[10px] text-black font-semibold">01700-000000</span>
+                    <span className="text-[11px] font-mono text-black font-semibold">01700-000000</span>
                   </button>
                 </div>
               </div>
 
               {/* Amount to Send & 1-Click Copy Number (Matching User's Screenshot) */}
-              <div className="flex items-center justify-between p-3.5 bg-white rounded-xl border border-neutral-300">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 bg-white rounded-xl border border-neutral-300">
                 <div>
                   <span className="text-[10px] uppercase font-bold text-black tracking-wider block">
                     Payable Amount Now:
@@ -865,7 +865,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                 <button
                   type="button"
                   onClick={() => handleCopyNumber('01700000000', `modal-${subPaymentChannel}`)}
-                  className="px-3.5 py-2 rounded-xl bg-black text-white hover:bg-neutral-800 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                  className="px-3.5 py-2 rounded-xl bg-black text-white hover:bg-neutral-800 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer shrink-0"
                 >
                   {copiedNumber === `modal-${subPaymentChannel}` ? (
                     <>

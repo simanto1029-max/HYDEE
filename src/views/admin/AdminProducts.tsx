@@ -18,7 +18,7 @@ import {
   Image as ImageIcon,
 } from 'lucide-react';
 import { store } from '../../services/store';
-import { Product, ProductVariant, BundleTier } from '../../types';
+import { Product, ProductVariant, BundleTier, Category } from '../../types';
 
 interface AdminProductsProps {
   onNavigateToProduct: (slug: string) => void;
@@ -26,7 +26,7 @@ interface AdminProductsProps {
 
 export const AdminProducts: React.FC<AdminProductsProps> = ({ onNavigateToProduct }) => {
   const [products, setProducts] = useState<Product[]>(store.getProducts());
-  const categories = store.getCategories();
+  const [categories, setCategories] = useState<Category[]>(store.getCategories());
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
 
@@ -35,6 +35,19 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ onNavigateToProduc
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
   const [deleteNotice, setDeleteNotice] = useState<string | null>(null);
+
+  // Quick category creation inside product modal
+  const [showQuickAddCategory, setShowQuickAddCategory] = useState(false);
+  const [quickCategoryName, setQuickCategoryName] = useState('');
+
+  // Subscribe to store updates so deleted products and added categories reflect in realtime
+  useEffect(() => {
+    const unsub = store.subscribe(() => {
+      setProducts(store.getProducts());
+      setCategories(store.getCategories());
+    });
+    return unsub;
+  }, []);
 
   // Form state
   const [formName, setFormName] = useState('');
@@ -543,18 +556,56 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ onNavigateToProduc
                 </div>
 
                 <div>
-                  <label className="block font-semibold text-neutral-800 mb-1">Department / Category *</label>
-                  <select
-                    value={formCatSlug}
-                    onChange={(e) => setFormCatSlug(e.target.value)}
-                    className="w-full p-3 border border-neutral-200 rounded-xl focus:border-[#800000] focus:outline-hidden"
-                  >
-                    {categories.map((c) => (
-                      <option key={c.id} value={c.slug}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block font-semibold text-neutral-800">Department / Category *</label>
+                    <button
+                      type="button"
+                      onClick={() => setShowQuickAddCategory(!showQuickAddCategory)}
+                      className="text-[11px] font-bold text-[#800000] hover:underline cursor-pointer"
+                    >
+                      {showQuickAddCategory ? 'Cancel' : '+ New Category'}
+                    </button>
+                  </div>
+
+                  {showQuickAddCategory ? (
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        placeholder="Enter category name..."
+                        value={quickCategoryName}
+                        onChange={(e) => setQuickCategoryName(e.target.value)}
+                        className="flex-1 p-2.5 border border-neutral-300 rounded-xl text-xs font-semibold focus:border-[#800000]"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!quickCategoryName.trim()) return;
+                          const created = store.saveCategory({
+                            name: quickCategoryName.trim(),
+                          });
+                          setFormCatSlug(created.slug);
+                          setQuickCategoryName('');
+                          setShowQuickAddCategory(false);
+                          setCategories(store.getCategories());
+                        }}
+                        className="px-3.5 py-2 bg-[#800000] text-white text-xs font-bold rounded-xl cursor-pointer hover:bg-[#5c0000]"
+                      >
+                        Add
+                      </button>
+                    </div>
+                  ) : (
+                    <select
+                      value={formCatSlug}
+                      onChange={(e) => setFormCatSlug(e.target.value)}
+                      className="w-full p-3 border border-neutral-200 rounded-xl focus:border-[#800000] focus:outline-hidden"
+                    >
+                      {categories.map((c) => (
+                        <option key={c.id} value={c.slug}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                 </div>
 
                 <div>
