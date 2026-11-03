@@ -266,7 +266,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab })
             <table className="w-full text-left text-xs">
               <thead>
                 <tr className="border-b border-neutral-100 text-neutral-500 uppercase font-bold text-[10px]">
-                  <th className="pb-3">Order Ref</th>
+                  <th className="pb-3">Order Ref & Time</th>
                   <th className="pb-3">Customer</th>
                   <th className="pb-3">Status</th>
                   <th className="pb-3">Advance Status</th>
@@ -275,13 +275,34 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab })
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-100">
-                {recentOrders.map((o) => (
-                  <tr key={o.id} className="hover:bg-neutral-50/60 transition-colors">
-                    <td className="py-3 font-mono font-bold text-neutral-900">{o.orderNumber}</td>
-                    <td className="py-3">
-                      <p className="font-bold text-neutral-900">{o.customerName}</p>
-                      <p className="text-[11px] text-neutral-400 font-mono">{o.customerPhone}</p>
-                    </td>
+                {recentOrders.map((o) => {
+                  const formattedTime = (() => {
+                    try {
+                      return new Date(o.createdAt).toLocaleString('en-GB', {
+                        day: '2-digit',
+                        month: 'short',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        hour12: true,
+                      });
+                    } catch {
+                      return 'Recent';
+                    }
+                  })();
+
+                  return (
+                    <tr key={o.id} className="hover:bg-neutral-50/60 transition-colors">
+                      <td className="py-3">
+                        <div className="font-mono font-bold text-neutral-900">{o.orderNumber}</div>
+                        <div className="text-[10px] text-neutral-500 font-sans font-medium mt-0.5 flex items-center gap-1">
+                          <Clock className="w-2.5 h-2.5 text-[#800000]" />
+                          <span>{formattedTime}</span>
+                        </div>
+                      </td>
+                      <td className="py-3">
+                        <p className="font-bold text-neutral-900">{o.customerName}</p>
+                        <p className="text-[11px] text-neutral-400 font-mono">{o.customerPhone}</p>
+                      </td>
                     <td className="py-3">
                       <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-neutral-100 text-neutral-800">
                         {o.status}
@@ -310,7 +331,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab })
                       </button>
                     </td>
                   </tr>
-                ))}
+                );
+              })}
               </tbody>
             </table>
           </div>

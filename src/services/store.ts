@@ -13,6 +13,7 @@ import {
   SiteSettings,
 } from '../types';
 import {
+  ALL_DEMO_PRODUCTS,
   INITIAL_CATEGORIES,
   INITIAL_DELIVERY_ZONES,
   INITIAL_HERO_SLIDES,
@@ -377,6 +378,18 @@ class StoreService {
     this.logAudit('Duplicate Product', `Duplicated ${original.name} as ${duplicated.name}`);
     this.persist();
     return duplicated;
+  }
+
+  restoreDemoProducts() {
+    this.products = [...ALL_DEMO_PRODUCTS];
+    this.deletedProductIds.clear();
+    try {
+      localStorage.removeItem(STORAGE_KEYS.DELETED_PRODUCTS);
+    } catch (e) {
+      console.error('Error clearing deleted products:', e);
+    }
+    this.logAudit('Restore Catalog', 'Restored 15 luxury atelier demo pieces');
+    this.persist();
   }
 
   // --- Categories ---
@@ -880,6 +893,21 @@ class StoreService {
     });
 
     this.logAudit('Order Delivered', `Order ${order.orderNumber} marked delivered. COD ৳${order.remainingCodAmount} collected.`);
+    this.persist();
+    return true;
+  }
+
+  deleteOrder(orderIdOrNumber: string): boolean {
+    const clean = orderIdOrNumber ? orderIdOrNumber.trim().toUpperCase() : '';
+    const order = this.orders.find(
+      (o) => o.id === orderIdOrNumber || o.orderNumber.trim().toUpperCase() === clean
+    );
+    if (!order) return false;
+
+    this.orders = this.orders.filter(
+      (o) => o.id !== order.id && o.orderNumber.trim().toUpperCase() !== clean
+    );
+    this.logAudit('Delete Order', `Order ${order.orderNumber} (${order.customerName}) deleted permanently by admin`);
     this.persist();
     return true;
   }

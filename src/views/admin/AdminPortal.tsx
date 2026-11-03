@@ -134,11 +134,11 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
 
   const tabs = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'products', label: 'Products & 360', icon: ShoppingBag },
-    { id: 'categories', label: 'Categories & Catalog', icon: Layers },
-    { id: 'orders', label: 'Orders & COD', icon: Package },
-    { id: 'marketing', label: 'Promotions & Pixel', icon: Tag },
-    { id: 'settings', label: 'Delivery & Settings', icon: Settings },
+    { id: 'orders', label: 'Orders', icon: Package },
+    { id: 'products', label: 'Products', icon: ShoppingBag },
+    { id: 'categories', label: 'Catalog', icon: Layers },
+    { id: 'marketing', label: 'Promotional & Pixel', icon: Tag },
+    { id: 'settings', label: 'Settings', icon: Settings },
   ];
 
   return (

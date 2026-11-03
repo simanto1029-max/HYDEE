@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { ProductCard } from '../components/ProductCard';
 import { store } from '../services/store';
 import { Product } from '../types';
@@ -19,8 +19,16 @@ export const HomeView: React.FC<HomeViewProps> = ({
   onAddToCart,
   onBuyNow,
 }) => {
-  const categories = store.getCategories();
-  const allProducts = store.getPublishedProducts();
+  const [categories, setCategories] = useState(store.getCategories());
+  const [allProducts, setAllProducts] = useState(store.getPublishedProducts());
+
+  useEffect(() => {
+    const unsubscribe = store.subscribe(() => {
+      setCategories(store.getCategories());
+      setAllProducts(store.getPublishedProducts());
+    });
+    return () => unsubscribe();
+  }, []);
 
   // Active category filter on homepage
   const [selectedCategorySlug, setSelectedCategorySlug] = useState<string>('all');

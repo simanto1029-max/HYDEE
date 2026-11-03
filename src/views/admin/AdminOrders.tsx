@@ -15,15 +15,37 @@ import {
   Copy,
   DollarSign,
   Package,
+  Trash2,
+  AlertTriangle,
+  Calendar,
 } from 'lucide-react';
 import { store } from '../../services/store';
 import { Order, OrderStatus } from '../../types';
+
+export const formatOrderDateTime = (dateString?: string): string => {
+  if (!dateString) return 'Just now';
+  try {
+    const d = new Date(dateString);
+    if (isNaN(d.getTime())) return dateString;
+    return d.toLocaleString('en-GB', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    });
+  } catch {
+    return dateString;
+  }
+};
 
 export const AdminOrders: React.FC = () => {
   const [orders, setOrders] = useState<Order[]>(store.getOrders());
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [orderToDelete, setOrderToDelete] = useState<Order | null>(null);
 
   // Manual verification modal state
   const [isVerifyModalOpen, setIsVerifyModalOpen] = useState(false);
@@ -126,10 +148,21 @@ export const AdminOrders: React.FC = () => {
     refreshOrders();
   };
 
+  const handleDeleteOrder = (order: Order) => {
+    store.deleteOrder(order.id);
+    if (selectedOrder && selectedOrder.id === order.id) {
+      setSelectedOrder(null);
+    }
+    setOrderToDelete(null);
+    refreshOrders();
+  };
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (isDispatchModalOpen) {
+        if (orderToDelete) {
+          setOrderToDelete(null);
+        } else if (isDispatchModalOpen) {
           setIsDispatchModalOpen(false);
         } else if (isVerifyModalOpen) {
           setIsVerifyModalOpen(false);
@@ -140,7 +173,7 @@ export const AdminOrders: React.FC = () => {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isDispatchModalOpen, isVerifyModalOpen, selectedOrder]);
+  }, [orderToDelete, isDispatchModalOpen, isVerifyModalOpen, selectedOrder]);
 
   // Helper to place a rapid sandbox test order for QA
   const handlePlaceTestOrder = () => {
@@ -259,7 +292,7 @@ export const AdminOrders: React.FC = () => {
           <table className="w-full text-left text-xs">
             <thead className="bg-neutral-50/70 border-b border-neutral-200 text-neutral-500 uppercase font-semibold">
               <tr>
-                <th className="p-4">Order Ref</th>
+                <th className="p-4">Order Ref & Time</th>
                 <th className="p-4">Customer</th>
                 <th className="p-4">Total Value</th>
                 <th className="p-4">Advance Fee (Deposit)</th>
@@ -283,13 +316,19 @@ export const AdminOrders: React.FC = () => {
 
                   return (
                     <tr key={order.id} className="hover:bg-neutral-50/50 transition-colors">
-                      <td className="p-4 font-mono font-bold text-neutral-900 tracking-wider tabular-nums">
-                        {order.orderNumber}
-                        {order.isTestOrder && (
-                          <span className="ml-1.5 text-[9px] bg-amber-100 text-amber-900 px-1.5 py-0.5 rounded-sm font-sans font-bold">
-                            SANDBOX
-                          </span>
-                        )}
+                      <td className="p-4">
+                        <div className="font-mono font-bold text-neutral-900 tracking-wider tabular-nums flex items-center gap-1.5">
+                          <span>{order.orderNumber}</span>
+                          {order.isTestOrder && (
+                            <span className="text-[9px] bg-amber-100 text-amber-900 px-1.5 py-0.5 rounded-sm font-sans font-bold">
+                              SANDBOX
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[11px] text-neutral-500 font-sans mt-1 flex items-center gap-1 font-medium">
+                          <Clock className="w-3 h-3 text-[#800000]" />
+                          <span>{formatOrderDateTime(order.createdAt)}</span>
+                        </div>
                       </td>
                       <td className="p-4">
                         <p className="font-semibold text-neutral-900">{order.customerName}</p>
@@ -388,7 +427,7 @@ export const AdminOrders: React.FC = () => {
                           )}
                         </div>
                       </td>
-                      <td className="p-4 text-right space-x-1.5 whitespace-nowrap">
+                      <td className="p-4 text-right space-x-2 whitespace-nowrap">
                         {/* Quick Action Button */}
                         {!isDelivered && (
                           <>
@@ -417,9 +456,19 @@ export const AdminOrders: React.FC = () => {
                         <button
                           onClick={() => setSelectedOrder(order)}
                           className="text-xs text-[#800000] font-semibold hover:underline inline-flex items-center gap-1 cursor-pointer"
+                          title="View order details and items"
                         >
                           <Eye className="w-3.5 h-3.5" />
-                          <span>Dossier</span>
+                          <span>Details</span>
+                        </button>
+
+                        <button
+                          onClick={() => setOrderToDelete(order)}
+                          className="text-xs text-neutral-400 hover:text-red-700 hover:bg-red-50 p-1 rounded-md transition-colors cursor-pointer inline-flex items-center gap-1"
+                          title="Delete Order Permanently"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span className="hidden xl:inline">Delete</span>
                         </button>
                       </td>
                     </tr>
@@ -431,8 +480,8 @@ export const AdminOrders: React.FC = () => {
         </div>
       </div>
 
-      {/* Order Dossier Detail Modal */}
-      {selectedOrder && !isVerifyModalOpen && !isDispatchModalOpen && (
+      {/* Order Details & Dispatch Modal */}
+      {selectedOrder && !isVerifyModalOpen && !isDispatchModalOpen && !orderToDelete && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-xs animate-in fade-in duration-200"
           onClick={(e) => {
@@ -443,20 +492,38 @@ export const AdminOrders: React.FC = () => {
             <div className="sticky top-0 z-20 bg-white/95 backdrop-blur-md px-6 py-4 border-b border-neutral-100 flex items-center justify-between shrink-0">
               <div>
                 <span className="text-[10px] font-bold text-[#800000] tracking-widest uppercase block">
-                  ORDER DOSSIER & COD DISPATCH
+                  ORDER DETAILS & COD DISPATCH
                 </span>
-                <h3 className="font-mono text-xl font-bold text-neutral-950 tracking-wider tabular-nums">
-                  {selectedOrder.orderNumber}
-                </h3>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <h3 className="font-mono text-xl font-bold text-neutral-950 tracking-wider tabular-nums">
+                    {selectedOrder.orderNumber}
+                  </h3>
+                  <div className="flex items-center gap-1 text-[11px] text-neutral-500 bg-neutral-100 px-2.5 py-0.5 rounded-full font-sans font-medium">
+                    <Clock className="w-3 h-3 text-[#800000]" />
+                    <span>{formatOrderDateTime(selectedOrder.createdAt)}</span>
+                  </div>
+                </div>
               </div>
-              <button
-                type="button"
-                onClick={() => setSelectedOrder(null)}
-                className="w-8 h-8 rounded-full bg-neutral-100 hover:bg-neutral-200 text-neutral-600 hover:text-neutral-950 flex items-center justify-center transition-colors cursor-pointer"
-                aria-label="Close"
-              >
-                <X className="w-4 h-4" />
-              </button>
+
+              <div className="flex items-center space-x-2">
+                <button
+                  type="button"
+                  onClick={() => setOrderToDelete(selectedOrder)}
+                  className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                  title="Delete this order permanently"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Delete Order</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedOrder(null)}
+                  className="w-8 h-8 rounded-full bg-neutral-100 hover:bg-neutral-200 text-neutral-600 hover:text-neutral-950 flex items-center justify-center transition-colors cursor-pointer"
+                  aria-label="Close"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
             </div>
 
             <div className="overflow-y-auto p-6 space-y-6 text-xs flex-1 touch-scroll">
@@ -847,6 +914,73 @@ export const AdminOrders: React.FC = () => {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Order Confirmation Modal */}
+      {orderToDelete && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs animate-in fade-in duration-200"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setOrderToDelete(null);
+          }}
+        >
+          <div className="bg-white rounded-2xl sm:rounded-3xl max-w-md w-full shadow-2xl border border-neutral-200 overflow-hidden relative p-6 space-y-4">
+            <div className="flex items-start gap-3.5">
+              <div className="w-10 h-10 rounded-full bg-red-100 text-red-700 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5 text-red-600" />
+              </div>
+              <div>
+                <h3 className="font-serif text-lg font-bold text-neutral-950">
+                  Delete Order {orderToDelete.orderNumber}?
+                </h3>
+                <p className="text-xs text-neutral-500 mt-1">
+                  Are you sure you want to permanently delete this order? This cannot be undone.
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-neutral-50 rounded-xl p-3.5 space-y-1.5 text-xs border border-neutral-100">
+              <div className="flex justify-between">
+                <span className="text-neutral-500">Customer:</span>
+                <span className="font-bold text-neutral-900">{orderToDelete.customerName}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-neutral-500">Phone:</span>
+                <span className="font-mono text-neutral-800">{orderToDelete.customerPhone}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-neutral-500">Total Value:</span>
+                <span className="font-bold text-neutral-900">৳{orderToDelete.totalAmount.toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-neutral-500">Placed At:</span>
+                <span className="text-neutral-700">{formatOrderDateTime(orderToDelete.createdAt)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-neutral-500">Status:</span>
+                <span className="font-semibold text-neutral-800">{orderToDelete.status}</span>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setOrderToDelete(null)}
+                className="px-4 py-2.5 border border-neutral-200 hover:bg-neutral-50 rounded-xl text-xs font-semibold text-neutral-700 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDeleteOrder(orderToDelete)}
+                className="px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Yes, Delete Order</span>
+              </button>
             </div>
           </div>
         </div>

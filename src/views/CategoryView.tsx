@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { ProductCard } from '../components/ProductCard';
 import { store } from '../services/store';
 import { Product } from '../types';
@@ -31,8 +31,16 @@ export const CategoryView: React.FC<CategoryViewProps> = ({
     return params.get('search') || '';
   }, []);
 
-  const categories = store.getCategories();
-  const allProducts = store.getPublishedProducts();
+  const [categories, setCategories] = useState(store.getCategories());
+  const [allProducts, setAllProducts] = useState(store.getPublishedProducts());
+
+  useEffect(() => {
+    const unsubscribe = store.subscribe(() => {
+      setCategories(store.getCategories());
+      setAllProducts(store.getPublishedProducts());
+    });
+    return () => unsubscribe();
+  }, []);
 
   // Filter products
   const filteredProducts = useMemo(() => {

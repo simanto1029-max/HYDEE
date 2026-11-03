@@ -63,15 +63,22 @@ export const AdminSettings: React.FC = () => {
     }
   };
 
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+
   const handleResetPristine = () => {
-    if (confirm('Warning: This will reset all products, orders, and settings to the initial HYDEE catalog state. Continue?')) {
-      store.resetToDefault();
-      setSettings(store.getSettings());
-      setZones(store.getDeliveryZones());
-      setAuditLogs(store.getAuditLogs());
-      setSavedNotice('Reset to initial boutique catalog complete.');
-      setTimeout(() => setSavedNotice(null), 3000);
-    }
+    store.resetToDefault();
+    setSettings(store.getSettings());
+    setZones(store.getDeliveryZones());
+    setAuditLogs(store.getAuditLogs());
+    setShowResetConfirm(false);
+    setSavedNotice('Reset to initial boutique catalog complete.');
+    setTimeout(() => setSavedNotice(null), 3000);
+  };
+
+  const handleRestoreDemoCatalog = () => {
+    store.restoreDemoProducts();
+    setSavedNotice('15 luxury demo pieces restored to catalog.');
+    setTimeout(() => setSavedNotice(null), 3000);
   };
 
   return (
@@ -374,18 +381,27 @@ export const AdminSettings: React.FC = () => {
         <div className="flex flex-wrap items-center gap-3">
           <button
             onClick={handleExportDatabase}
-            className="bg-neutral-900 hover:bg-neutral-800 text-white text-xs font-semibold px-5 py-3 rounded-xl uppercase tracking-wider inline-flex items-center gap-2"
+            className="bg-neutral-900 hover:bg-neutral-800 text-white text-xs font-semibold px-5 py-3 rounded-xl uppercase tracking-wider inline-flex items-center gap-2 cursor-pointer"
           >
             <Download className="w-4 h-4" />
             <span>Export Backup JSON</span>
           </button>
 
           <button
-            onClick={handleResetPristine}
-            className="border border-red-300 text-red-700 hover:bg-red-50 text-xs font-semibold px-4 py-3 rounded-xl uppercase tracking-wider inline-flex items-center gap-2"
+            onClick={handleRestoreDemoCatalog}
+            className="bg-neutral-100 hover:bg-neutral-200 text-neutral-800 text-xs font-semibold px-4 py-3 rounded-xl uppercase tracking-wider inline-flex items-center gap-2 cursor-pointer"
+            title="Load the 15 editorial demo samples back into the catalog"
+          >
+            <Database className="w-4 h-4 text-[#800000]" />
+            <span>Restore 15 Sample Demo Pieces</span>
+          </button>
+
+          <button
+            onClick={() => setShowResetConfirm(true)}
+            className="border border-red-300 text-red-700 hover:bg-red-50 text-xs font-semibold px-4 py-3 rounded-xl uppercase tracking-wider inline-flex items-center gap-2 cursor-pointer"
           >
             <RotateCcw className="w-4 h-4" />
-            <span>Reset to Initial Pristine Catalog</span>
+            <span>Factory Reset Catalog</span>
           </button>
         </div>
 
@@ -445,6 +461,50 @@ export const AdminSettings: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* Factory Reset Confirmation Modal */}
+      {showResetConfirm && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs animate-in fade-in duration-200"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowResetConfirm(false);
+          }}
+        >
+          <div className="bg-white rounded-2xl sm:rounded-3xl max-w-md w-full shadow-2xl border border-neutral-200 overflow-hidden relative p-6 space-y-4">
+            <div className="flex items-start gap-3.5">
+              <div className="w-10 h-10 rounded-full bg-red-100 text-red-700 flex items-center justify-center shrink-0">
+                <AlertCircle className="w-5 h-5 text-red-600" />
+              </div>
+              <div>
+                <h3 className="font-serif text-lg font-bold text-neutral-950">
+                  Reset Atelier Catalog?
+                </h3>
+                <p className="text-xs text-neutral-500 mt-1">
+                  This will reset products, orders, and configurations to the original baseline. Are you sure?
+                </p>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowResetConfirm(false)}
+                className="px-4 py-2.5 border border-neutral-200 hover:bg-neutral-50 rounded-xl text-xs font-semibold text-neutral-700 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleResetPristine}
+                className="px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Yes, Reset Catalog</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

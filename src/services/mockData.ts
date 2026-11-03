@@ -43,10 +43,8 @@ export const INITIAL_CATEGORIES: Category[] = [
   },
 ];
 
-export const INITIAL_PRODUCTS: Product[] = [
-  // --- 1. EDITORIAL SPOTLIGHT / THREE PIECE & SILK SETS ---
-  {
-    id: 'prod-tp-glory',
+export const GLORY_RED_PRODUCT: Product = {
+  id: 'prod-tp-glory',
     name: 'Glory Red Hand-Embroidered Luxury Three Piece Ensemble',
     slug: 'glory-red-hand-embroidered-luxury-three-piece',
     sku: 'HYD-3PC-GLORY',
@@ -87,7 +85,10 @@ export const INITIAL_PRODUCTS: Product[] = [
     isFeatured: true,
     createdAt: '2026-02-12T10:00:00Z',
     updatedAt: '2026-02-12T10:00:00Z',
-  },
+};
+
+export const ALL_DEMO_PRODUCTS: Product[] = [
+  GLORY_RED_PRODUCT,
   {
     id: 'prod-krt-heritage',
     name: 'Royal Heritage Fuchsia Silk Festive Co-ord Suit',
@@ -693,6 +694,8 @@ export const INITIAL_PRODUCTS: Product[] = [
     updatedAt: '2026-02-10T10:00:00Z',
   },
 ];
+
+export const INITIAL_PRODUCTS: Product[] = [GLORY_RED_PRODUCT];
 
 export const INITIAL_HERO_SLIDES: HeroSlide[] = [
   {
