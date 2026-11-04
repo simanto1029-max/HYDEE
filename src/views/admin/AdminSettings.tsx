@@ -10,9 +10,19 @@ import {
   ShieldCheck,
   FileText,
   AlertCircle,
+  Eye,
+  EyeOff,
+  ExternalLink,
+  RefreshCw,
+  KeyRound,
 } from 'lucide-react';
 import { store } from '../../services/store';
-import { isSupabaseConfigured } from '../../services/supabase';
+import {
+  isSupabaseConfigured,
+  getSupabaseConfig,
+  saveSupabaseConfig,
+  testSupabaseConnection,
+} from '../../services/supabase';
 import { DeliveryZone, SiteSettings } from '../../types';
 
 export const AdminSettings: React.FC = () => {
@@ -20,6 +30,14 @@ export const AdminSettings: React.FC = () => {
   const [zones, setZones] = useState<DeliveryZone[]>(store.getDeliveryZones());
   const [auditLogs, setAuditLogs] = useState(store.getAuditLogs());
   const [savedNotice, setSavedNotice] = useState<string | null>(null);
+
+  const initialSb = getSupabaseConfig();
+  const [sbUrl, setSbUrl] = useState(initialSb.url);
+  const [sbAnonKey, setSbAnonKey] = useState(initialSb.anonKey);
+  const [showSbKey, setShowSbKey] = useState(false);
+  const [isTestingSb, setIsTestingSb] = useState(false);
+  const [sbTestResult, setSbTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [sbConnected, setSbConnected] = useState(initialSb.isConfigured);
 
   const [importJsonText, setImportJsonText] = useState('');
   const [importStatus, setImportStatus] = useState<string | null>(null);
@@ -343,42 +361,210 @@ export const AdminSettings: React.FC = () => {
         </form>
       </div>
 
-      {/* Supabase PostgreSQL Backend Status */}
-      <div className="bg-white rounded-2xl border border-neutral-200 shadow-xs p-6 space-y-4">
-        <div className="flex items-center justify-between pb-3 border-b border-neutral-100">
-          <div className="flex items-center space-x-2">
-            <Database className="w-5 h-5 text-[#800000]" />
-            <h3 className="font-serif text-lg font-bold text-neutral-950">
-              Supabase Backend Architecture
-            </h3>
+      {/* Supabase PostgreSQL Cloud Integration & Live Sync */}
+      <div className="bg-white rounded-2xl border border-neutral-200 shadow-xs p-6 space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-neutral-100">
+          <div className="flex items-center space-x-2.5">
+            <div className="w-9 h-9 rounded-xl bg-[#800000]/10 flex items-center justify-center text-[#800000]">
+              <Database className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="font-serif text-lg font-bold text-neutral-950">
+                Supabase Live Cloud Integration & Multi-Device Sync
+              </h3>
+              <p className="text-xs text-neutral-500">
+                Real-time PostgreSQL sync for instant updates across mobile, desktop, and global visitors.
+              </p>
+            </div>
           </div>
           <span
-            className={`text-[11px] font-bold px-3 py-1 rounded-full ${
-              isSupabaseConfigured
+            className={`self-start sm:self-auto text-xs font-bold px-3.5 py-1.5 rounded-full inline-flex items-center gap-1.5 ${
+              sbConnected
                 ? 'bg-emerald-100 text-emerald-800'
-                : 'bg-neutral-100 text-neutral-600'
+                : 'bg-amber-100 text-amber-800'
             }`}
           >
-            {isSupabaseConfigured ? 'Connected (Live Supabase API)' : 'Local Storage Engine (Active)'}
+            <span className={`w-2 h-2 rounded-full ${sbConnected ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'}`} />
+            {sbConnected ? 'Cloud Supabase Active' : 'Local Storage Mode'}
           </span>
         </div>
 
-        <p className="text-xs text-neutral-600 leading-relaxed">
-          HYDEE is equipped with automated Supabase Cloud synchronization. To make sure products, categories, and orders sync live across all browsers and devices without any RLS permission errors, run the setup script in your Supabase SQL Editor:
-        </p>
+        {/* Credentials Form */}
+        <div className="space-y-4">
+          <div>
+            <label className="block text-xs font-bold text-neutral-800 uppercase tracking-wider mb-1.5">
+              1. Project URL (<span className="font-mono text-[#800000]">VITE_SUPABASE_URL</span>)
+            </label>
+            <input
+              type="text"
+              placeholder="e.g. https://wlmbxcjxoxvfyyknnxus.supabase.co"
+              value={sbUrl}
+              onChange={(e) => {
+                setSbUrl(e.target.value);
+                setSbTestResult(null);
+              }}
+              className="w-full text-xs font-mono p-3 bg-neutral-50 border border-neutral-200 rounded-xl focus:bg-white focus:border-[#800000] focus:ring-1 focus:ring-[#800000] transition-colors"
+            />
+            <p className="text-[11px] text-neutral-500 mt-1">
+              Your Supabase project URL (format: <code className="text-neutral-700 font-mono">https://&lt;project-id&gt;.supabase.co</code>)
+            </p>
+          </div>
 
-        <div className="p-3 bg-neutral-50 border border-neutral-200 rounded-xl text-xs space-y-1">
-          <p className="font-semibold text-neutral-900">
-            📄 SQL Setup Script: <span className="font-mono text-[#800000]">/supabase/HYDEE_SUPABASE_SETUP.sql</span>
-          </p>
-          <p className="text-neutral-500 text-[11px]">
-            Open this file, copy all lines, and paste into <strong>Supabase Dashboard &gt; SQL Editor &gt; Run</strong>. It creates all tables and grants full access to your Vercel deployment.
-          </p>
+          <div>
+            <label className="block text-xs font-bold text-neutral-800 uppercase tracking-wider mb-1.5 flex items-center justify-between">
+              <span>2. Anon Public Key (<span className="font-mono text-[#800000]">VITE_SUPABASE_ANON_KEY</span>)</span>
+              <button
+                type="button"
+                onClick={() => setShowSbKey(!showSbKey)}
+                className="text-[11px] font-normal text-neutral-500 hover:text-neutral-900 inline-flex items-center gap-1 cursor-pointer"
+              >
+                {showSbKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                <span>{showSbKey ? 'Hide Key' : 'Reveal Key'}</span>
+              </button>
+            </label>
+            <input
+              type={showSbKey ? 'text' : 'password'}
+              placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+              value={sbAnonKey}
+              onChange={(e) => {
+                setSbAnonKey(e.target.value);
+                setSbTestResult(null);
+              }}
+              className="w-full text-xs font-mono p-3 bg-neutral-50 border border-neutral-200 rounded-xl focus:bg-white focus:border-[#800000] focus:ring-1 focus:ring-[#800000] transition-colors"
+            />
+            <p className="text-[11px] text-neutral-500 mt-1">
+              The public anonymous JWT token found under <strong>Project Settings &gt; API &gt; Project API keys &gt; anon public</strong>.
+            </p>
+          </div>
+
+          {/* Test & Save Actions */}
+          <div className="flex flex-wrap items-center gap-3 pt-2">
+            <button
+              type="button"
+              disabled={isTestingSb || !sbUrl.trim() || !sbAnonKey.trim()}
+              onClick={async () => {
+                setIsTestingSb(true);
+                setSbTestResult(null);
+                try {
+                  const saved = saveSupabaseConfig(sbUrl, sbAnonKey);
+                  const result = await testSupabaseConnection();
+                  setSbTestResult(result);
+                  setSbConnected(result.success);
+                  if (result.success) {
+                    await store.syncFromSupabase();
+                    setSavedNotice('Supabase connected! Catalog synced with PostgreSQL cloud database.');
+                    setTimeout(() => setSavedNotice(null), 4000);
+                  }
+                } finally {
+                  setIsTestingSb(false);
+                }
+              }}
+              className="bg-[#800000] hover:bg-[#600000] text-white text-xs font-semibold px-5 py-3 rounded-xl uppercase tracking-wider inline-flex items-center gap-2 cursor-pointer transition-colors disabled:opacity-40"
+            >
+              {isTestingSb ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  <span>Connecting & Testing...</span>
+                </>
+              ) : (
+                <>
+                  <Check className="w-4 h-4" />
+                  <span>Save & Connect Cloud Database</span>
+                </>
+              )}
+            </button>
+
+            {sbConnected && (
+              <button
+                type="button"
+                onClick={async () => {
+                  setIsTestingSb(true);
+                  try {
+                    await store.syncFromSupabase();
+                    setSavedNotice('Manually re-synced all categories, products, and orders from Supabase.');
+                    setTimeout(() => setSavedNotice(null), 3000);
+                  } finally {
+                    setIsTestingSb(false);
+                  }
+                }}
+                className="border border-neutral-200 hover:bg-neutral-50 text-neutral-800 text-xs font-semibold px-4 py-3 rounded-xl uppercase tracking-wider inline-flex items-center gap-2 cursor-pointer transition-colors"
+              >
+                <RefreshCw className="w-4 h-4" />
+                <span>Pull Fresh Data Now</span>
+              </button>
+            )}
+          </div>
+
+          {/* Result notice */}
+          {sbTestResult && (
+            <div
+              className={`p-3.5 rounded-xl border text-xs flex items-start gap-2.5 ${
+                sbTestResult.success
+                  ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                  : 'bg-red-50 border-red-200 text-red-900'
+              }`}
+            >
+              {sbTestResult.success ? (
+                <Check className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+              ) : (
+                <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+              )}
+              <div>
+                <p className="font-semibold">{sbTestResult.success ? 'Connected Successfully!' : 'Connection Error'}</p>
+                <p className="text-[11px] opacity-90 mt-0.5">{sbTestResult.message}</p>
+              </div>
+            </div>
+          )}
         </div>
 
-        <div className="p-4 bg-neutral-900 text-neutral-200 rounded-xl font-mono text-[11px] space-y-1">
-          <p>VITE_SUPABASE_URL="https://your-project.supabase.co"</p>
-          <p>VITE_SUPABASE_ANON_KEY="your-anon-public-key"</p>
+        {/* Step-by-Step Guide for Supabase & Vercel */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+          {/* Guide 1: How to find in Supabase */}
+          <div className="p-4 bg-neutral-50 border border-neutral-200 rounded-xl space-y-2 text-xs">
+            <div className="flex items-center gap-2 text-neutral-900 font-bold">
+              <KeyRound className="w-4 h-4 text-[#800000]" />
+              <span>কোথা থেকে পাবেন (Supabase Dashboard):</span>
+            </div>
+            <ol className="list-decimal list-inside space-y-1.5 text-neutral-600 text-[11px] leading-relaxed">
+              <li>
+                <strong className="text-neutral-800">supabase.com/dashboard</strong> এ গিয়ে আপনার প্রজেক্ট ওপেন করুন।
+              </li>
+              <li>
+                বাম পাশের মেনুর একদম নিচে থাকা <strong>Project Settings ⚙️ (Gear Icon)</strong> এ ক্লিক করুন।
+              </li>
+              <li>
+                সেটিংস থেকে <strong>API</strong> (বা Data API) অপশনে যান।
+              </li>
+              <li>
+                সেখানে <strong className="text-[#800000]">Project URL</strong> এবং <strong className="text-[#800000]">Project API keys</strong> এর অধীনে <code className="bg-neutral-200 px-1 py-0.5 rounded font-mono">anon public</code> কি-টি কপি করুন।
+              </li>
+            </ol>
+          </div>
+
+          {/* Guide 2: How to add to Vercel */}
+          <div className="p-4 bg-neutral-50 border border-neutral-200 rounded-xl space-y-2 text-xs">
+            <div className="flex items-center gap-2 text-neutral-900 font-bold">
+              <ExternalLink className="w-4 h-4 text-[#800000]" />
+              <span>কোথায় বসাবেন (Vercel Production):</span>
+            </div>
+            <ol className="list-decimal list-inside space-y-1.5 text-neutral-600 text-[11px] leading-relaxed">
+              <li>
+                <strong className="text-neutral-800">vercel.com</strong> এ আপনার HYDEE প্রজেক্টের ড্যাশবোর্ডে যান।
+              </li>
+              <li>
+                উপরের মেনু থেকে <strong>Settings</strong> &gt; <strong>Environment Variables</strong> এ যান।
+              </li>
+              <li>
+                Key: <code className="bg-neutral-200 px-1 py-0.5 rounded font-mono font-bold">VITE_SUPABASE_URL</code> এবং Value তে আপনার Supabase URL দিন।
+              </li>
+              <li>
+                Key: <code className="bg-neutral-200 px-1 py-0.5 rounded font-mono font-bold">VITE_SUPABASE_ANON_KEY</code> এবং Value তে anon key দিন।
+              </li>
+              <li>
+                <strong>Deployments</strong> ট্যাবে গিয়ে ৩ ডটে ক্লিক করে <strong>Redeploy</strong> চাপুন। ব্যাস!
+              </li>
+            </ol>
+          </div>
         </div>
       </div>
 
