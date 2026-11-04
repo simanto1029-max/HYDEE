@@ -126,6 +126,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
               <input
                 type="email"
                 required
+                autoComplete="off"
+                placeholder="simanto1029@gmail.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full p-3.5 border border-neutral-200 rounded-xl focus:border-[#800000] focus:outline-hidden"
@@ -139,6 +141,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
               <input
                 type="password"
                 required
+                autoComplete="current-password"
+                placeholder="Enter password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full p-3.5 border border-neutral-200 rounded-xl focus:border-[#800000] focus:outline-hidden font-mono"
