@@ -81,6 +81,12 @@ export const AdminSettings: React.FC = () => {
     setTimeout(() => setSavedNotice(null), 3000);
   };
 
+  const handleRestoreDemoCategories = () => {
+    store.restoreDemoCategories();
+    setSavedNotice('5 luxury categories restored to catalog.');
+    setTimeout(() => setSavedNotice(null), 3000);
+  };
+
   return (
     <div className="space-y-10">
       {/* Header */}
@@ -358,12 +364,17 @@ export const AdminSettings: React.FC = () => {
         </div>
 
         <p className="text-xs text-neutral-600 leading-relaxed">
-          HYDEE is equipped with a PostgreSQL schema and Row Level Security (RLS) setup located in{' '}
-          <code className="bg-neutral-100 px-1.5 py-0.5 rounded-sm font-mono text-neutral-800">
-            /supabase/migrations/001_initial_schema.sql
-          </code>
-          . To connect your remote Supabase cloud project, set these environment variables in your deployment:
+          HYDEE is equipped with automated Supabase Cloud synchronization. To make sure products, categories, and orders sync live across all browsers and devices without any RLS permission errors, run the setup script in your Supabase SQL Editor:
         </p>
+
+        <div className="p-3 bg-neutral-50 border border-neutral-200 rounded-xl text-xs space-y-1">
+          <p className="font-semibold text-neutral-900">
+            📄 SQL Setup Script: <span className="font-mono text-[#800000]">/supabase/HYDEE_SUPABASE_SETUP.sql</span>
+          </p>
+          <p className="text-neutral-500 text-[11px]">
+            Open this file, copy all lines, and paste into <strong>Supabase Dashboard &gt; SQL Editor &gt; Run</strong>. It creates all tables and grants full access to your Vercel deployment.
+          </p>
+        </div>
 
         <div className="p-4 bg-neutral-900 text-neutral-200 rounded-xl font-mono text-[11px] space-y-1">
           <p>VITE_SUPABASE_URL="https://your-project.supabase.co"</p>
@@ -394,6 +405,15 @@ export const AdminSettings: React.FC = () => {
           >
             <Database className="w-4 h-4 text-[#800000]" />
             <span>Restore 15 Sample Demo Pieces</span>
+          </button>
+
+          <button
+            onClick={handleRestoreDemoCategories}
+            className="bg-neutral-100 hover:bg-neutral-200 text-neutral-800 text-xs font-semibold px-4 py-3 rounded-xl uppercase tracking-wider inline-flex items-center gap-2 cursor-pointer"
+            title="Load the 5 luxury categories back into the catalog"
+          >
+            <Database className="w-4 h-4 text-neutral-700" />
+            <span>Restore 5 Sample Categories</span>
           </button>
 
           <button

@@ -127,9 +127,9 @@ export default function App() {
       );
     }
 
-    // 4. Product Detail Page: /products/:slug
-    if (currentPath.startsWith('/products/')) {
-      const slug = currentPath.replace('/products/', '');
+    // 4. Product Detail Page: /products/:slug or /product/:slug
+    if (currentPath.startsWith('/products/') || currentPath.startsWith('/product/')) {
+      const slug = currentPath.replace(/^\/(products|product)\//, '');
       return (
         <ProductDetailView
           slug={slug}
@@ -140,8 +140,8 @@ export default function App() {
       );
     }
 
-    // 5. Complete products catalog: /products
-    if (currentPath === '/products') {
+    // 5. Complete products catalog: /products, /shop, /catalog
+    if (currentPath === '/products' || currentPath === '/shop' || currentPath === '/catalog') {
       return (
         <CategoryView
           onNavigate={navigate}
@@ -152,9 +152,9 @@ export default function App() {
       );
     }
 
-    // 6. Category Page: /categories/:slug
-    if (currentPath.startsWith('/categories/')) {
-      const slug = currentPath.replace('/categories/', '');
+    // 6. Category Page: /categories/:slug or /category/:slug
+    if (currentPath.startsWith('/categories/') || currentPath.startsWith('/category/')) {
+      const slug = currentPath.replace(/^\/(categories|category)\//, '');
       return (
         <CategoryView
           categorySlug={slug}
@@ -166,8 +166,20 @@ export default function App() {
       );
     }
 
-    // 7. Track Order: /track-order
-    if (currentPath === '/track-order') {
+    // 6b. All Categories: /categories, /collections
+    if (currentPath === '/categories' || currentPath === '/collections') {
+      return (
+        <CategoryView
+          onNavigate={navigate}
+          onSelectProduct={(slug) => navigate(`/products/${slug}`)}
+          onAddToCart={handleAddToCart}
+          onBuyNow={handleBuyNow}
+        />
+      );
+    }
+
+    // 7. Track Order: /track-order or /track
+    if (currentPath === '/track-order' || currentPath === '/track') {
       return <TrackOrderView onNavigate={navigate} />;
     }
 
@@ -182,10 +194,10 @@ export default function App() {
     }
 
     // 10. Legal policies
-    if (currentPath === '/legal/deposit') {
+    if (currentPath === '/legal/deposit' || currentPath === '/advance-courier-policy' || currentPath === '/deposit-policy') {
       return <LegalView policyType="deposit" onNavigate={navigate} />;
     }
-    if (currentPath === '/legal/privacy' || currentPath === '/privacy-policy') {
+    if (currentPath === '/legal/privacy' || currentPath === '/privacy-policy' || currentPath === '/privacy') {
       return <LegalView policyType="privacy" onNavigate={navigate} />;
     }
     if (currentPath === '/legal/terms' || currentPath === '/terms' || currentPath === '/terms-and-conditions') {

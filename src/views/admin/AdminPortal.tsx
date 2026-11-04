@@ -26,12 +26,40 @@ interface AdminPortalProps {
   onNavigateToProduct: (slug: string) => void;
 }
 
+type AdminTabType = 'dashboard' | 'products' | 'categories' | 'orders' | 'marketing' | 'settings';
+
+const getTabFromPath = (path: string): AdminTabType => {
+  const clean = path.toLowerCase();
+  if (clean.includes('/admin/orders')) return 'orders';
+  if (clean.includes('/admin/products')) return 'products';
+  if (clean.includes('/admin/catalog') || clean.includes('/admin/categories')) return 'categories';
+  if (clean.includes('/admin/promotional') || clean.includes('/admin/marketing') || clean.includes('/admin/pixel')) return 'marketing';
+  if (clean.includes('/admin/settings') || clean.includes('/admin/setting')) return 'settings';
+  return 'dashboard';
+};
+
 export const AdminPortal: React.FC<AdminPortalProps> = ({
   onNavigateHome,
   onNavigateToProduct,
 }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(store.isAdminLoggedIn());
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'products' | 'categories' | 'orders' | 'marketing' | 'settings'>('dashboard');
+  const [activeTab, setActiveTabState] = useState<AdminTabType>(() => getTabFromPath(window.location.pathname));
+
+  const setActiveTab = (tab: AdminTabType) => {
+    setActiveTabState(tab);
+    const slugMap: Record<AdminTabType, string> = {
+      dashboard: '/admin/dashboard',
+      orders: '/admin/orders',
+      products: '/admin/products',
+      categories: '/admin/catalog',
+      marketing: '/admin/promotional',
+      settings: '/admin/settings',
+    };
+    const target = slugMap[tab] || '/admin';
+    if (window.location.pathname !== target) {
+      window.history.pushState(null, '', target);
+    }
+  };
 
   // Login form state (Blank by default for security)
   const [email, setEmail] = useState('');
@@ -40,6 +68,12 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
 
   useEffect(() => {
     setIsAuthenticated(store.isAdminLoggedIn());
+
+    const handlePop = () => {
+      setActiveTabState(getTabFromPath(window.location.pathname));
+    };
+    window.addEventListener('popstate', handlePop);
+    return () => window.removeEventListener('popstate', handlePop);
   }, []);
 
   const handleLogin = (e: React.FormEvent) => {

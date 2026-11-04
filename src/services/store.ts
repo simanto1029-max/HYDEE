@@ -13,6 +13,7 @@ import {
   SiteSettings,
 } from '../types';
 import {
+  ALL_DEMO_CATEGORIES,
   ALL_DEMO_PRODUCTS,
   INITIAL_CATEGORIES,
   INITIAL_DELIVERY_ZONES,
@@ -21,6 +22,7 @@ import {
   INITIAL_PROMO_POPUP,
   INITIAL_SITE_SETTINGS,
 } from './mockData';
+import { supabase, isSupabaseConfigured } from './supabase';
 
 export const INITIAL_COUPONS: Coupon[] = [
   {
@@ -70,6 +72,7 @@ const STORAGE_KEYS = {
   PRODUCTS: 'hydee_products_v6',
   DELETED_PRODUCTS: 'hydee_deleted_product_ids_v2',
   CATEGORIES: 'hydee_categories_v6',
+  DELETED_CATEGORIES: 'hydee_deleted_category_ids_v2',
   ORDERS: 'hydee_orders_v2',
   CART: 'hydee_cart_v2',
   ZONES: 'hydee_zones_v2',
@@ -85,6 +88,7 @@ class StoreService {
   private products: Product[] = [];
   private deletedProductIds: Set<string> = new Set();
   private categories: Category[] = [];
+  private deletedCategoryIds: Set<string> = new Set();
   private orders: Order[] = [];
   private cart: CartItem[] = [];
   private coupons: Coupon[] = [];
@@ -97,6 +101,9 @@ class StoreService {
 
   constructor() {
     this.loadFromStorage();
+    if (isSupabaseConfigured && supabase) {
+      this.syncFromSupabase();
+    }
   }
 
   private loadFromStorage() {
@@ -111,12 +118,23 @@ class StoreService {
         } catch (e) {}
       }
 
+      const storedDeletedCats = localStorage.getItem(STORAGE_KEYS.DELETED_CATEGORIES);
+      if (storedDeletedCats) {
+        try {
+          const arr = JSON.parse(storedDeletedCats);
+          if (Array.isArray(arr)) {
+            this.deletedCategoryIds = new Set(arr);
+          }
+        } catch (e) {}
+      }
+
       const storedProds = localStorage.getItem(STORAGE_KEYS.PRODUCTS);
       const rawProds: Product[] = storedProds ? JSON.parse(storedProds) : INITIAL_PRODUCTS;
       this.products = rawProds.filter((p) => !this.deletedProductIds.has(p.id));
 
       const storedCats = localStorage.getItem(STORAGE_KEYS.CATEGORIES);
-      this.categories = storedCats ? JSON.parse(storedCats) : INITIAL_CATEGORIES;
+      const rawCats: Category[] = storedCats ? JSON.parse(storedCats) : INITIAL_CATEGORIES;
+      this.categories = rawCats.filter((c) => !this.deletedCategoryIds.has(c.id) && !this.deletedCategoryIds.has(c.slug));
 
       const storedOrders = localStorage.getItem(STORAGE_KEYS.ORDERS);
       this.orders = storedOrders ? JSON.parse(storedOrders) : [];
@@ -187,6 +205,110 @@ class StoreService {
     return () => {
       this.listeners.delete(listener);
     };
+  }
+
+  async syncFromSupabase() {
+    if (!isSupabaseConfigured || !supabase) return;
+    try {
+      // 1. Fetch Categories
+      const { data: catData, error: catError } = await supabase
+        .from('categories')
+        .select('*')
+        .order('display_order', { ascending: true });
+
+      if (!catError && catData && catData.length > 0) {
+        this.categories = catData.map((c: any) => ({
+          id: c.id,
+          name: c.name,
+          slug: c.slug,
+          description: c.description || '',
+          imageUrl: c.image_url || '/images/editorial-glory-red.jpg',
+          displayOrder: c.display_order || 1,
+        }));
+      }
+
+      // 2. Fetch Products
+      const { data: prodData, error: prodError } = await supabase
+        .from('products')
+        .select('*')
+        .eq('is_archived', false);
+
+      if (!prodError && prodData && prodData.length > 0) {
+        this.products = prodData.map((p: any) => ({
+          id: p.id,
+          name: p.name,
+          slug: p.slug,
+          sku: p.sku,
+          categorySlug: p.category_slug,
+          categoryName: p.category_name,
+          price: Number(p.price),
+          compareAtPrice: p.compare_at_price ? Number(p.compare_at_price) : undefined,
+          costPrice: p.cost_price ? Number(p.cost_price) : undefined,
+          stock: p.stock ?? 10,
+          description: p.description || '',
+          shortDescription: p.short_description || '',
+          specifications: {
+            fabric: p.fabric || '',
+            fit: p.fit || '',
+            care: p.care || '',
+            origin: p.origin || '',
+            craftsmanshipNotes: p.craftsmanship_notes || '',
+          },
+          images: Array.isArray(p.images) && p.images.length > 0 ? p.images : ['/images/editorial-glory-red.jpg'],
+          variants: Array.isArray(p.variants) && p.variants.length > 0 ? p.variants : [],
+          tags: Array.isArray(p.tags) ? p.tags : [],
+          isBestSeller: Boolean(p.is_best_seller),
+          isFeatured: Boolean(p.is_featured),
+          isHangerFeatured: Boolean(p.is_hanger_featured),
+          isArchived: Boolean(p.is_archived),
+          createdAt: p.created_at || new Date().toISOString(),
+          updatedAt: p.updated_at || new Date().toISOString(),
+        }));
+      }
+
+      // 3. Fetch Orders
+      const { data: orderData, error: orderError } = await supabase
+        .from('orders')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (!orderError && orderData && orderData.length > 0) {
+        this.orders = orderData.map((o: any) => ({
+          id: o.id,
+          orderNumber: o.order_number,
+          customerName: o.customer_name,
+          customerPhone: o.customer_phone,
+          customerEmail: o.customer_email,
+          deliveryAddress: o.delivery_address,
+          district: o.district,
+          zoneId: o.zone_id,
+          zoneName: o.zone_name,
+          notes: o.notes,
+          subtotal: Number(o.subtotal),
+          advanceDeliveryFee: Number(o.advance_delivery_fee),
+          discountAmount: Number(o.discount_amount || 0),
+          discountCode: o.discount_code,
+          totalAmount: Number(o.total_amount),
+          remainingCodAmount: Number(o.remaining_cod_amount),
+          status: o.status,
+          paymentStatus: o.payment_status,
+          advancePaymentMethod: o.advance_payment_method,
+          transactionId: o.transaction_id,
+          verifiedAt: o.verified_at,
+          courierName: o.courier_name,
+          courierTrackingCode: o.courier_tracking_code,
+          isTestOrder: Boolean(o.is_test_order),
+          createdAt: o.created_at,
+          updatedAt: o.updated_at,
+          timeline: Array.isArray(o.timeline) ? o.timeline : [],
+          items: Array.isArray(o.items) ? o.items : [],
+        }));
+      }
+
+      this.persist();
+    } catch (err) {
+      console.warn('Supabase initial sync notice:', err);
+    }
   }
 
   private notify() {
@@ -331,6 +453,36 @@ class StoreService {
     }
 
     this.persist();
+
+    if (isSupabaseConfigured && supabase) {
+      supabase.from('products').upsert({
+        id: saved.id,
+        name: saved.name,
+        slug: saved.slug,
+        sku: saved.sku,
+        category_slug: saved.categorySlug,
+        category_name: saved.categoryName,
+        price: saved.price,
+        compare_at_price: saved.compareAtPrice,
+        cost_price: saved.costPrice,
+        stock: saved.stock,
+        description: saved.description,
+        short_description: saved.shortDescription,
+        fabric: saved.specifications?.fabric || '',
+        fit: saved.specifications?.fit || '',
+        care: saved.specifications?.care || '',
+        origin: saved.specifications?.origin || '',
+        craftsmanship_notes: saved.specifications?.craftsmanshipNotes || '',
+        images: saved.images,
+        variants: saved.variants,
+        tags: saved.tags,
+        is_best_seller: saved.isBestSeller,
+        is_featured: saved.isFeatured,
+        is_hanger_featured: saved.isHangerFeatured,
+        is_archived: saved.isArchived,
+      }).then(() => {});
+    }
+
     return saved;
   }
 
@@ -349,6 +501,10 @@ class StoreService {
       this.logAudit('Delete Product', `Permanently deleted product: ${product.name} (${product.sku})`);
     }
     this.persist();
+
+    if (isSupabaseConfigured && supabase) {
+      supabase.from('products').delete().eq('id', id).then(() => {});
+    }
   }
 
   duplicateProduct(id: string): Product | null {
@@ -430,6 +586,19 @@ class StoreService {
 
       this.logAudit('Update Category', `Updated category: ${category.name || this.categories[idx].name}`);
       this.persist();
+
+      if (isSupabaseConfigured && supabase) {
+        const cat = this.categories[idx];
+        supabase.from('categories').upsert({
+          id: cat.id,
+          name: cat.name,
+          slug: cat.slug,
+          description: cat.description || '',
+          image_url: cat.imageUrl || '',
+          display_order: cat.displayOrder || 1,
+        }).then(() => {});
+      }
+
       return this.categories[idx];
     } else {
       const baseSlug = (category.slug || category.name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -451,6 +620,18 @@ class StoreService {
       this.categories.push(newCat);
       this.logAudit('Create Category', `Created category: ${newCat.name}`);
       this.persist();
+
+      if (isSupabaseConfigured && supabase) {
+        supabase.from('categories').upsert({
+          id: newCat.id,
+          name: newCat.name,
+          slug: newCat.slug,
+          description: newCat.description || '',
+          image_url: newCat.imageUrl || '',
+          display_order: newCat.displayOrder || 1,
+        }).then(() => {});
+      }
+
       return newCat;
     }
   }
@@ -458,6 +639,12 @@ class StoreService {
   deleteCategory(id: string, reassignToCategorySlug?: string) {
     const cat = this.categories.find((c) => c.id === id);
     if (!cat) return;
+
+    this.deletedCategoryIds.add(id);
+    if (cat.slug) this.deletedCategoryIds.add(cat.slug);
+    try {
+      localStorage.setItem(STORAGE_KEYS.DELETED_CATEGORIES, JSON.stringify(Array.from(this.deletedCategoryIds)));
+    } catch (e) {}
 
     // Handle products in this category
     const remainingCats = this.categories.filter((c) => c.id !== id);
@@ -474,6 +661,20 @@ class StoreService {
 
     this.categories = remainingCats;
     this.logAudit('Delete Category', `Deleted category: ${cat.name}`);
+    this.persist();
+
+    if (isSupabaseConfigured && supabase) {
+      supabase.from('categories').delete().or(`id.eq.${id},slug.eq.${cat.slug}`).then(() => {});
+    }
+  }
+
+  restoreDemoCategories() {
+    this.categories = [...ALL_DEMO_CATEGORIES];
+    this.deletedCategoryIds.clear();
+    try {
+      localStorage.removeItem(STORAGE_KEYS.DELETED_CATEGORIES);
+    } catch (e) {}
+    this.logAudit('Restore Categories', 'Restored 5 luxury atelier demo categories');
     this.persist();
   }
 
@@ -727,6 +928,40 @@ class StoreService {
 
     this.orders.unshift(newOrder);
     this.persist();
+
+    if (isSupabaseConfigured && supabase) {
+      supabase.from('orders').insert({
+        id: newOrder.id,
+        order_number: newOrder.orderNumber,
+        customer_name: newOrder.customerName,
+        customer_phone: newOrder.customerPhone,
+        customer_email: newOrder.customerEmail,
+        delivery_address: newOrder.deliveryAddress,
+        district: newOrder.district,
+        zone_id: newOrder.zoneId,
+        zone_name: newOrder.zoneName,
+        notes: newOrder.notes,
+        subtotal: newOrder.subtotal,
+        advance_delivery_fee: newOrder.advanceDeliveryFee,
+        discount_amount: newOrder.discountAmount,
+        discount_code: newOrder.discountCode,
+        total_amount: newOrder.totalAmount,
+        remaining_cod_amount: newOrder.remainingCodAmount,
+        status: newOrder.status,
+        payment_status: newOrder.paymentStatus,
+        advance_payment_method: newOrder.advancePaymentMethod,
+        transaction_id: newOrder.transactionId,
+        verified_at: newOrder.verifiedAt,
+        courier_name: newOrder.courierName,
+        courier_tracking_code: newOrder.courierTrackingCode,
+        is_test_order: newOrder.isTestOrder,
+        timeline: newOrder.timeline,
+        items: newOrder.items,
+        created_at: newOrder.createdAt,
+        updated_at: newOrder.updatedAt,
+      }).then(() => {});
+    }
+
     return { success: true, order: newOrder };
   }
 
@@ -909,6 +1144,11 @@ class StoreService {
     );
     this.logAudit('Delete Order', `Order ${order.orderNumber} (${order.customerName}) deleted permanently by admin`);
     this.persist();
+
+    if (isSupabaseConfigured && supabase) {
+      supabase.from('orders').delete().or(`id.eq.${order.id},order_number.eq.${clean}`).then(() => {});
+    }
+
     return true;
   }
 

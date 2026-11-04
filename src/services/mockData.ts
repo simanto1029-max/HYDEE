@@ -1,14 +1,16 @@
 import { Category, DeliveryZone, HeroSlide, Product, PromotionalPopup, SiteSettings } from '../types';
 
-export const INITIAL_CATEGORIES: Category[] = [
-  {
-    id: 'cat-three-piece',
-    name: 'Three Piece',
-    slug: 'three-piece',
-    description: 'Bespoke artisanal three-piece ensembles with pure silk, intricate zardozi, and organza dupattas.',
-    imageUrl: '/images/editorial-glory-red.jpg',
-    displayOrder: 1,
-  },
+export const THREE_PIECE_CATEGORY: Category = {
+  id: 'cat-three-piece',
+  name: 'Three Piece',
+  slug: 'three-piece',
+  description: 'Bespoke artisanal three-piece ensembles with pure silk, intricate zardozi, and organza dupattas.',
+  imageUrl: '/images/editorial-glory-red.jpg',
+  displayOrder: 1,
+};
+
+export const ALL_DEMO_CATEGORIES: Category[] = [
+  THREE_PIECE_CATEGORY,
   {
     id: 'cat-sharees',
     name: 'Sharees',
@@ -42,6 +44,8 @@ export const INITIAL_CATEGORIES: Category[] = [
     displayOrder: 5,
   },
 ];
+
+export const INITIAL_CATEGORIES: Category[] = [THREE_PIECE_CATEGORY];
 
 export const GLORY_RED_PRODUCT: Product = {
   id: 'prod-tp-glory',
