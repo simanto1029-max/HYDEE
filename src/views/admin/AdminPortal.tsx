@@ -127,7 +127,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                 type="email"
                 required
                 autoComplete="off"
-                placeholder="simanto1029@gmail.com"
+                spellCheck={false}
+                placeholder="name@company.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full p-3.5 border border-neutral-200 rounded-xl focus:border-[#800000] focus:outline-hidden"
