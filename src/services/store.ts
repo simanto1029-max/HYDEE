@@ -165,6 +165,13 @@ class StoreService {
         this.settings.adminEmail = 'simanto1029@gmail.com';
         this.settings.adminPassword = 'soumik1029';
       }
+      if (!this.settings.supportEmail || this.settings.supportEmail === 'support@hydee.com') {
+        this.settings.supportEmail = 'support@hydee.shop';
+      }
+      if (this.settings.tangailLocation === 'Main Atelier, Tangail, Dhaka Division, Bangladesh') {
+        this.settings.tangailLocation = 'Tangail, Dhaka Division, Bangladesh';
+        this.settings.address = 'Tangail, Dhaka Division, Bangladesh';
+      }
 
       const storedPromo = localStorage.getItem(STORAGE_KEYS.PROMO);
       this.promoPopup = storedPromo ? JSON.parse(storedPromo) : INITIAL_PROMO_POPUP;
@@ -308,6 +315,19 @@ class StoreService {
           items: Array.isArray(o.items) ? o.items : [],
         }));
       }
+
+      // 4. Fetch Site Settings
+      try {
+        const { data: settingsData, error: settingsError } = await supabase
+          .from('site_settings')
+          .select('*')
+          .eq('id', 'global')
+          .maybeSingle();
+
+        if (!settingsError && settingsData && settingsData.data) {
+          this.settings = { ...this.settings, ...settingsData.data };
+        }
+      } catch (err) {}
 
       this.persist();
     } catch (err) {
@@ -1210,6 +1230,17 @@ class StoreService {
     this.settings = { ...this.settings, ...newSettings };
     this.logAudit('Update Site Settings', 'Updated store configuration');
     this.persist();
+
+    if (isSupabaseConfigured && supabase) {
+      supabase
+        .from('site_settings')
+        .upsert({
+          id: 'global',
+          data: this.settings,
+          updated_at: new Date().toISOString(),
+        })
+        .then(() => {}, () => {});
+    }
   }
 
   getPromoPopup(): PromotionalPopup {

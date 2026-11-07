@@ -103,11 +103,19 @@ CREATE TABLE public.delivery_zones (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 5. ENABLE ROW LEVEL SECURITY & GRANT FULL PUBLIC (ANON) ACCESS
+-- 5. SITE SETTINGS TABLE (Brand, Contact, Emails across all devices)
+CREATE TABLE IF NOT EXISTS public.site_settings (
+  id TEXT PRIMARY KEY,
+  data JSONB NOT NULL DEFAULT '{}'::jsonb,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 6. ENABLE ROW LEVEL SECURITY & GRANT FULL PUBLIC (ANON) ACCESS
 ALTER TABLE public.categories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.products ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.delivery_zones ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.site_settings ENABLE ROW LEVEL SECURITY;
 
 -- Categories RLS Policy (Allow SELECT, INSERT, UPDATE, DELETE for anon)
 DROP POLICY IF EXISTS "Allow all for categories" ON public.categories;
@@ -125,11 +133,15 @@ CREATE POLICY "Allow all for orders" ON public.orders FOR ALL TO anon, authentic
 DROP POLICY IF EXISTS "Allow all for delivery_zones" ON public.delivery_zones;
 CREATE POLICY "Allow all for delivery_zones" ON public.delivery_zones FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
 
+-- Site Settings RLS Policy
+DROP POLICY IF EXISTS "Allow all for site_settings" ON public.site_settings;
+CREATE POLICY "Allow all for site_settings" ON public.site_settings FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
 -- Grant schema usage
 GRANT USAGE ON SCHEMA public TO anon, authenticated;
 GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated;
 
--- 6. INSERT SEED DATA (IF EMPTY)
+-- 7. INSERT SEED DATA (IF EMPTY)
 INSERT INTO public.categories (id, name, slug, description, image_url, display_order)
 VALUES (
   'cat-three-piece',
@@ -180,3 +192,19 @@ VALUES
   ('zone-dhaka', 'Inside Dhaka Metropolitan', 80.00, '1 - 2 Business Days', TRUE),
   ('zone-outside-dhaka', 'Outside Dhaka / Nationwide', 150.00, '2 - 4 Business Days', TRUE)
 ON CONFLICT (id) DO UPDATE SET advance_fee = EXCLUDED.advance_fee;
+
+INSERT INTO public.site_settings (id, data)
+VALUES (
+  'global',
+  '{
+    "brandName": "HYDEE",
+    "tagline": "Bespoke luxury for every occasion, crafted in Bangladesh.",
+    "supportEmail": "support@hydee.shop",
+    "hotlinePhone": "+880 1700-000000",
+    "whatsappNumber": "8801700000000",
+    "address": "Tangail, Dhaka Division, Bangladesh",
+    "tangailLocation": "Tangail, Dhaka Division, Bangladesh",
+    "currencySymbol": "৳"
+  }'::jsonb
+)
+ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data;
