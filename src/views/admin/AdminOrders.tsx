@@ -18,6 +18,7 @@ import {
   Trash2,
   AlertTriangle,
   Calendar,
+  Banknote,
 } from 'lucide-react';
 import { store } from '../../services/store';
 import { Order, OrderStatus } from '../../types';
@@ -277,11 +278,11 @@ export const AdminOrders: React.FC = () => {
           className="text-xs px-4 py-3 bg-white border border-neutral-200 rounded-xl focus:border-[#800000] focus:outline-hidden"
         >
           <option value="all">All Statuses ({orders.length})</option>
-          <option value="PENDING_ADVANCE">Pending Advance Payment</option>
-          <option value="CONFIRMED">Confirmed (Advance Paid)</option>
+          <option value="PENDING_ADVANCE">Pending Full Prepayment</option>
+          <option value="CONFIRMED">Confirmed Order</option>
           <option value="PROCESSING">Processing (Atelier Packing)</option>
           <option value="SHIPPED">Shipped via Courier</option>
-          <option value="DELIVERED">Delivered & COD Collected</option>
+          <option value="DELIVERED">Delivered & Collected</option>
           <option value="CANCELLED">Cancelled</option>
         </select>
       </div>
@@ -295,8 +296,8 @@ export const AdminOrders: React.FC = () => {
                 <th className="p-4">Order Ref & Time</th>
                 <th className="p-4">Customer</th>
                 <th className="p-4">Total Value</th>
-                <th className="p-4">Advance Fee (Deposit)</th>
-                <th className="p-4">Doorstep COD</th>
+                <th className="p-4">Payment Method</th>
+                <th className="p-4">Doorstep Collection</th>
                 <th className="p-4">Order Status & Courier</th>
                 <th className="p-4 text-right">Actions</th>
               </tr>
@@ -341,11 +342,21 @@ export const AdminOrders: React.FC = () => {
                         ৳{order.totalAmount.toLocaleString()}
                       </td>
                       <td className="p-4">
-                        {order.paymentStatus === 'ADVANCE_VERIFIED' ? (
+                        {order.paymentType === 'advance_cod' ? (
+                          <div>
+                            <span className="text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-md text-[10px] font-bold font-sans flex items-center gap-1 w-fit">
+                              <Banknote className="w-3 h-3 text-blue-600" />
+                              Cash On Delivery
+                            </span>
+                            <span className="text-[10px] text-neutral-500 block mt-0.5">
+                              0% Advance Required
+                            </span>
+                          </div>
+                        ) : order.paymentStatus === 'ADVANCE_VERIFIED' || order.paymentStatus === 'FULLY_PAID' ? (
                           <div>
                             <span className="text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md text-[10px] font-bold font-sans tabular-nums flex items-center gap-1 w-fit">
                               <ShieldCheck className="w-3 h-3" />
-                              ৳{order.advanceDeliveryFee} Verified
+                              ৳{order.totalAmount.toLocaleString()} Pre-paid
                             </span>
                             <span className="text-[10px] text-neutral-500 block mt-0.5 font-mono">
                               {order.advancePaymentMethod?.toUpperCase()} · {order.transactionId}
@@ -354,14 +365,14 @@ export const AdminOrders: React.FC = () => {
                         ) : (
                           <div>
                             <span className="text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md text-[10px] font-bold font-sans tabular-nums block w-fit">
-                              Pending ৳{order.advanceDeliveryFee}
+                              Pending Full Prepayment
                             </span>
                             <button
                               onClick={() => {
                                 setSelectedOrder(order);
                                 setIsVerifyModalOpen(true);
                               }}
-                              className="text-[10px] text-[#800000] font-semibold hover:underline mt-1 block"
+                              className="text-[10px] text-[#800000] font-semibold hover:underline mt-1 block cursor-pointer"
                             >
                               + Manual Verify TrxID
                             </button>
@@ -369,7 +380,14 @@ export const AdminOrders: React.FC = () => {
                         )}
                       </td>
                       <td className="p-4">
-                        {isDelivered ? (
+                        {order.paymentType === 'full_prepaid' && (order.paymentStatus === 'FULLY_PAID' || order.paymentStatus === 'ADVANCE_VERIFIED') ? (
+                          <div>
+                            <span className="text-neutral-600 bg-neutral-100 border border-neutral-200 px-2 py-0.5 rounded-md text-[10px] font-bold">
+                              ৳0 (100% Pre-paid)
+                            </span>
+                            <span className="text-[10px] text-neutral-400 block mt-0.5">No Doorstep Due</span>
+                          </div>
+                        ) : isDelivered ? (
                           <div>
                             <span className="text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-md text-[10px] font-bold font-sans tabular-nums inline-flex items-center gap-1">
                               <CheckCircle2 className="w-3 h-3 text-emerald-600" />
@@ -379,10 +397,10 @@ export const AdminOrders: React.FC = () => {
                           </div>
                         ) : (
                           <div>
-                            <span className="font-sans font-bold text-[#800000] tabular-nums block">
+                            <span className="font-sans font-bold text-[#800000] tabular-nums block text-xs">
                               ৳{order.remainingCodAmount.toLocaleString()}
                             </span>
-                            <span className="text-[10px] text-neutral-400 block">Pending Courier Handover</span>
+                            <span className="text-[10px] text-neutral-500 block">Due on Delivery</span>
                           </div>
                         )}
                       </td>
@@ -683,33 +701,39 @@ export const AdminOrders: React.FC = () => {
                 </div>
               </div>
 
-              {/* Advance Payment Details */}
+              {/* Payment Details */}
               <div className="p-4 border border-neutral-200 rounded-xl space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="font-bold text-neutral-900">Advance Payment Deposit</span>
-                  {selectedOrder.paymentStatus === 'ADVANCE_VERIFIED' ? (
-                    <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-sm font-bold text-[10px]">
-                      VERIFIED
-                    </span>
-                  ) : (
-                    <button
-                      onClick={() => setIsVerifyModalOpen(true)}
-                      className="text-xs bg-[#800000] text-white px-3 py-1 rounded-lg font-semibold cursor-pointer"
-                    >
-                      Verify Now
-                    </button>
-                  )}
+                  <span className="font-bold text-neutral-900">Payment & Settlement</span>
+                  <span className="text-blue-700 bg-blue-50 px-2 py-0.5 rounded-sm font-bold text-[10px] border border-blue-200">
+                    {selectedOrder.paymentType === 'advance_cod' ? 'CASH ON DELIVERY' : '100% PRE-PAID'}
+                  </span>
                 </div>
-                {selectedOrder.paymentStatus === 'ADVANCE_VERIFIED' ? (
+                {selectedOrder.paymentType === 'advance_cod' ? (
+                  <div className="text-neutral-600 space-y-1 text-[11px]">
+                    <p>Terms: <strong className="text-neutral-900">100% Cash On Delivery at Doorstep</strong></p>
+                    <p>Advance Deposit: <span className="font-semibold text-emerald-700">৳0 (None required)</span></p>
+                    <p>Doorstep Collection Amount: <span className="font-sans font-bold text-[#800000]">৳{selectedOrder.totalAmount.toLocaleString()}</span></p>
+                  </div>
+                ) : selectedOrder.paymentStatus === 'ADVANCE_VERIFIED' || selectedOrder.paymentStatus === 'FULLY_PAID' ? (
                   <div className="text-neutral-600 space-y-1 text-[11px]">
                     <p>Method: <strong className="uppercase">{selectedOrder.advancePaymentMethod}</strong></p>
                     <p>Transaction ID: <span className="font-mono font-bold text-neutral-900">{selectedOrder.transactionId}</span></p>
+                    <p>Amount Verified: <span className="font-bold text-emerald-700">৳{selectedOrder.totalAmount.toLocaleString()} (100% Paid)</span></p>
                     <p>Verified at: {new Date(selectedOrder.verifiedAt || '').toLocaleString()}</p>
                   </div>
                 ) : (
-                  <p className="text-neutral-500 text-[11px]">
-                    Customer has not yet provided verified TrxID for the ৳{selectedOrder.advanceDeliveryFee} advance payment.
-                  </p>
+                  <div>
+                    <p className="text-neutral-500 text-[11px] mb-2">
+                      Customer selected Full Prepayment but has not yet submitted TrxID.
+                    </p>
+                    <button
+                      onClick={() => setIsVerifyModalOpen(true)}
+                      className="text-xs bg-[#800000] text-white px-3 py-1.5 rounded-lg font-semibold cursor-pointer"
+                    >
+                      Verify Payment Now
+                    </button>
+                  </div>
                 )}
               </div>
 

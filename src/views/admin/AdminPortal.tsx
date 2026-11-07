@@ -196,7 +196,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
             onClick={onNavigateHome}
             className="hidden sm:inline-flex items-center space-x-1.5 text-xs text-neutral-300 hover:text-white transition-colors cursor-pointer"
           >
-            <span>Live Boutique</span>
+            <span>Live Storefront</span>
             <ExternalLink className="w-3.5 h-3.5" />
           </button>
 

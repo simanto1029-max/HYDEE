@@ -159,10 +159,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab })
           </div>
         </div>
 
-        {/* 2. Verified Advance Delivery Fees */}
+        {/* 2. Prepayment Revenue */}
         <div className="bg-white p-5 rounded-2xl border border-neutral-200 shadow-2xs space-y-2 hover:border-neutral-300 transition-colors">
           <div className="flex items-center justify-between text-neutral-500">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-600">Advance Fees Collected</span>
+            <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-600">Prepayments Verified</span>
             <CheckCircle2 className="w-4 h-4 text-emerald-600" />
           </div>
           <p className="font-sans text-2xl font-extrabold text-emerald-700 tabular-nums">
@@ -197,7 +197,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab })
             {totalOrdersCount}
           </p>
           <div className="text-[11px] text-neutral-500 font-medium">
-            <span>{confirmedCount} confirmed · {pendingAdvanceCount} awaiting advance</span>
+            <span>{confirmedCount} confirmed · {pendingAdvanceCount} awaiting prepayment</span>
           </div>
         </div>
       </div>
@@ -208,9 +208,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab })
           onClick={() => onNavigateTab('orders')}
           className="bg-white p-4 rounded-xl border border-neutral-200 cursor-pointer hover:border-[#800000] transition-colors"
         >
-          <span className="text-[10px] font-bold uppercase text-neutral-500 tracking-wider block">1. Pending Advance</span>
+          <span className="text-[10px] font-bold uppercase text-neutral-500 tracking-wider block">1. Pending Prepayment</span>
           <span className="text-xl font-extrabold text-neutral-900 mt-1 block">{pendingAdvanceCount}</span>
-          <span className="text-[11px] text-amber-600 font-medium">Requires TrxID verification</span>
+          <span className="text-[11px] text-amber-600 font-medium">Requires customer TrxID</span>
         </div>
 
         <div
@@ -269,7 +269,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab })
                   <th className="pb-3">Order Ref & Time</th>
                   <th className="pb-3">Customer</th>
                   <th className="pb-3">Status</th>
-                  <th className="pb-3">Advance Status</th>
+                  <th className="pb-3">Payment Mode</th>
                   <th className="pb-3">COD Due</th>
                   <th className="pb-3 text-right">Action</th>
                 </tr>
@@ -309,18 +309,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab })
                       </span>
                     </td>
                     <td className="py-3">
-                      {o.paymentStatus === 'ADVANCE_VERIFIED' || o.paymentStatus === 'FULLY_PAID' || o.paymentStatus === 'COD_COLLECTED' ? (
+                      {o.paymentType === 'advance_cod' ? (
+                        <span className="bg-blue-50 text-blue-800 border border-blue-200 px-2 py-0.5 rounded-md text-[10px] font-bold">
+                          Cash On Delivery
+                        </span>
+                      ) : o.paymentStatus === 'ADVANCE_VERIFIED' || o.paymentStatus === 'FULLY_PAID' || o.paymentStatus === 'COD_COLLECTED' ? (
                         <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded-md text-[10px] font-bold">
-                          ৳{o.advanceDeliveryFee} Verified
+                          Prepaid (Verified)
                         </span>
                       ) : (
                         <span className="bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded-md text-[10px] font-bold">
-                          Pending ৳{o.advanceDeliveryFee}
+                          Pending Prepayment
                         </span>
                       )}
                     </td>
                     <td className="py-3 font-bold text-neutral-900 tabular-nums">
-                      ৳{o.remainingCodAmount.toLocaleString()}
+                      {o.paymentType === 'full_prepaid' && (o.paymentStatus === 'FULLY_PAID' || o.paymentStatus === 'ADVANCE_VERIFIED')
+                        ? '৳0 (Pre-paid)'
+                        : `৳${o.remainingCodAmount.toLocaleString()}`}
                     </td>
                     <td className="py-3 text-right">
                       <button

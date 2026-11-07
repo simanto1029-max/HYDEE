@@ -124,15 +124,15 @@ export const AdminSettings: React.FC = () => {
         </div>
       )}
 
-      {/* Delivery Zones & Required Advance Payment Fees */}
+      {/* Delivery Zones & Standard Shipping Fees */}
       <div className="bg-white rounded-2xl border border-neutral-200 shadow-xs p-6 space-y-6">
         <div>
           <h3 className="font-serif text-lg font-bold text-neutral-950 flex items-center gap-2">
             <Truck className="w-5 h-5 text-[#800000]" />
-            <span>Delivery Zones & Required Advance Fees (Cash on Delivery Model)</span>
+            <span>Delivery Zones & Standard Shipping Fees</span>
           </h3>
           <p className="text-xs text-neutral-500 mt-1">
-            Specify the required advance delivery fee customer must pay prior to parcel dispatch for each geographical area.
+            Specify the standard delivery fee added to orders for each geographical region across Bangladesh.
           </p>
         </div>
 
@@ -142,7 +142,7 @@ export const AdminSettings: React.FC = () => {
               <span className="font-bold text-neutral-900 block text-sm">{zone.name}</span>
               <div>
                 <label className="block text-neutral-600 font-semibold mb-1">
-                  Required Advance Fee (৳ BDT)
+                  Standard Delivery Fee (৳ BDT)
                 </label>
                 <input
                   type="number"

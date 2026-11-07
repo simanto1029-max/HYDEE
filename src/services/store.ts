@@ -165,13 +165,19 @@ class StoreService {
         this.settings.adminEmail = 'simanto1029@gmail.com';
         this.settings.adminPassword = 'soumik1029';
       }
-      if (!this.settings.supportEmail || this.settings.supportEmail === 'support@hydee.com') {
+      if (
+        !this.settings.supportEmail ||
+        this.settings.supportEmail.includes('@hydee.com') ||
+        this.settings.supportEmail === 'concierge@hydee.com' ||
+        this.settings.supportEmail === 'support@hydee.com'
+      ) {
         this.settings.supportEmail = 'support@hydee.shop';
       }
       if (this.settings.tangailLocation === 'Main Atelier, Tangail, Dhaka Division, Bangladesh') {
         this.settings.tangailLocation = 'Tangail, Dhaka Division, Bangladesh';
         this.settings.address = 'Tangail, Dhaka Division, Bangladesh';
       }
+      localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(this.settings));
 
       const storedPromo = localStorage.getItem(STORAGE_KEYS.PROMO);
       this.promoPopup = storedPromo ? JSON.parse(storedPromo) : INITIAL_PROMO_POPUP;
@@ -382,7 +388,7 @@ class StoreService {
   }
 
   getSimilarProducts(product: Product, limit: number = 4): Product[] {
-    // 1. If manual recommendations are configured
+    // 1. If manual recommendations are configured and exist in store
     if (product.manualRecommendationIds && product.manualRecommendationIds.length > 0) {
       const recs = this.products.filter(
         (p) => !p.isArchived && p.id !== product.id && product.manualRecommendationIds?.includes(p.id)
@@ -390,40 +396,16 @@ class StoreService {
       if (recs.length > 0) return recs.slice(0, limit);
     }
 
-    // 2. Direct similar matches: same category or matching tags
-    const directMatches = this.products.filter(
+    // 2. Strictly find other products in the SAME catalog/category that actually exist in the admin products
+    const sameCatalogMatches = this.products.filter(
       (p) =>
         !p.isArchived &&
         p.id !== product.id &&
-        (p.categorySlug === product.categorySlug ||
-          (Array.isArray(p.tags) && Array.isArray(product.tags) && p.tags.some((t) => product.tags.includes(t))))
+        (p.categorySlug === product.categorySlug || p.categoryName === product.categoryName)
     );
 
-    if (directMatches.length >= limit) {
-      return directMatches.slice(0, limit);
-    }
-
-    // 3. Fallback: if not enough direct matches, fill with other available store products
-    const selectedIds = new Set<string>([product.id, ...directMatches.map((p) => p.id)]);
-    const otherStoreProducts = this.products.filter(
-      (p) => !p.isArchived && !selectedIds.has(p.id)
-    );
-
-    const result: Product[] = [...directMatches, ...otherStoreProducts];
-    if (result.length >= limit) {
-      return result.slice(0, limit);
-    }
-
-    // 4. Atelier archive fallback: if the database has only 1 product, pull other pieces from ALL_DEMO_PRODUCTS so section always has recommendations
-    for (const demoP of ALL_DEMO_PRODUCTS) {
-      if (result.length >= limit) break;
-      if (!selectedIds.has(demoP.id) && demoP.id !== product.id && demoP.slug !== product.slug) {
-        result.push(demoP);
-        selectedIds.add(demoP.id);
-      }
-    }
-
-    return result.slice(0, limit);
+    // Return other pieces only if they exist in this catalog; otherwise empty array (do NOT show unrelated or demo products)
+    return sameCatalogMatches.slice(0, limit);
   }
 
   generateUniqueSlug(name: string, excludeId?: string): string {
@@ -941,7 +923,25 @@ class StoreService {
     const advanceDeliveryFee = zone.advanceFee;
     const totalAmount = Math.max(0, subtotal + advanceDeliveryFee - discountAmount);
     const isFullPayment = payload.paymentType === 'full_prepaid';
-    const remainingCodAmount = isFullPayment ? 0 : totalAmount - advanceDeliveryFee;
+    const remainingCodAmount = isFullPayment ? 0 : totalAmount;
+
+    // For Cash on Delivery, order is confirmed immediately with full amount due on delivery
+    const initialStatus: OrderStatus = isFullPayment ? 'PENDING_ADVANCE' : 'CONFIRMED';
+    const initialPaymentStatus: PaymentStatus = 'UNPAID';
+
+    // Deduct stock immediately for COD orders (since they don't go through TrxID verification modal)
+    if (!isFullPayment && !payload.isTestOrder) {
+      for (const item of validatedOrderItems) {
+        const prod = this.getProductById(item.productId);
+        if (prod) {
+          const vIdx = prod.variants.findIndex((v) => v.id === item.variantId);
+          if (vIdx >= 0) {
+            prod.variants[vIdx].stock = Math.max(0, (prod.variants[vIdx].stock || 0) - item.quantity);
+          }
+          prod.stock = Math.max(0, (prod.stock || 0) - item.quantity);
+        }
+      }
+    }
 
     const orderNumber = `HYD-2026-${Math.floor(1000 + Math.random() * 9000)}`;
     const now = new Date().toISOString();
@@ -966,8 +966,8 @@ class StoreService {
       remainingCodAmount,
       paymentType: payload.paymentType || 'advance_cod',
       isFullPayment,
-      status: 'PENDING_ADVANCE',
-      paymentStatus: 'UNPAID',
+      status: initialStatus,
+      paymentStatus: initialPaymentStatus,
       isTestOrder: Boolean(payload.isTestOrder),
       courierName: zone.name.includes('Inside') ? 'Pathao' : 'Steadfast',
       createdAt: now,
@@ -975,10 +975,10 @@ class StoreService {
       timeline: [
         {
           timestamp: now,
-          status: 'ORDER_INITIATED',
+          status: isFullPayment ? 'ORDER_INITIATED' : 'CONFIRMED',
           note: isFullPayment
-            ? `Full prepayment order initiated. Amount due: ৳${totalAmount.toLocaleString()}`
-            : `Cash on Delivery order initiated. Required advance courier fee: ৳${advanceDeliveryFee}`,
+            ? `100% Full Prepayment order initiated. Amount due: ৳${totalAmount.toLocaleString()}`
+            : `Cash on Delivery order placed successfully. Total payable in cash upon delivery: ৳${totalAmount.toLocaleString()}`,
           actor: 'Customer',
         },
       ],
@@ -1223,11 +1223,18 @@ class StoreService {
 
   // --- Site Settings & Marketing ---
   getSettings(): SiteSettings {
-    return { ...this.settings };
+    const s = { ...this.settings };
+    if (!s.supportEmail || s.supportEmail.includes('@hydee.com') || s.supportEmail === 'concierge@hydee.com') {
+      s.supportEmail = 'support@hydee.shop';
+    }
+    return s;
   }
 
   updateSettings(newSettings: Partial<SiteSettings>) {
     this.settings = { ...this.settings, ...newSettings };
+    if (!this.settings.supportEmail || this.settings.supportEmail.includes('@hydee.com')) {
+      this.settings.supportEmail = 'support@hydee.shop';
+    }
     this.logAudit('Update Site Settings', 'Updated store configuration');
     this.persist();
 

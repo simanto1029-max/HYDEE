@@ -83,8 +83,8 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
   const totalAmount = Math.max(0, subtotal + advanceDeliveryFee - discountAmount);
 
   // Payable values based on selected payment option:
-  const payableNow = paymentType === 'full_prepaid' ? totalAmount : advanceDeliveryFee;
-  const doorstepCodDue = paymentType === 'full_prepaid' ? 0 : totalAmount - advanceDeliveryFee;
+  const payableNow = paymentType === 'full_prepaid' ? totalAmount : 0;
+  const doorstepCodDue = paymentType === 'full_prepaid' ? 0 : totalAmount;
 
   // Track InitiateCheckout on mount
   useEffect(() => {
@@ -217,8 +217,19 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
       return;
     }
 
-    // Immediately open the Payment Modal containing the payment options
     const createdOrder = result.order;
+
+    // For Cash on Delivery: Order is placed and confirmed immediately! Zero advance payment popup!
+    if (paymentType === 'advance_cod') {
+      if (!directBuyItem) {
+        onClearCart();
+      }
+      onOrderConfirmed(createdOrder);
+      onNavigate(`/thank-you?order=${createdOrder.orderNumber}`);
+      return;
+    }
+
+    // For 100% Full Prepayment: Open payment modal to complete bKash / Nagad transfer
     setPendingOrder(createdOrder);
     setModalTrxId('');
     setPaymentError(null);
@@ -400,10 +411,10 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                   </div>
                 </div>
 
-                {/* Shipping Region & Advance Delivery Charge */}
+                {/* Shipping Region & Delivery Charge */}
                 <div className="pt-1">
                   <span className="block text-[11px] uppercase font-bold text-black tracking-wider mb-2">
-                    Shipping Region & Advance Delivery Charge *
+                    Shipping Region & Delivery Charge *
                   </span>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {zones.map((zone) => {
@@ -428,7 +439,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                             </span>
                           </div>
                           <span className="text-[11px] text-black font-medium block mt-1">
-                            {zone.estimatedDays} · Courier Fee
+                            {zone.estimatedDays} · Standard Shipping
                           </span>
                         </div>
                       );
@@ -455,7 +466,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
               {/* Exactly 2 options */}
               <div className="space-y-3">
                 
-                {/* OPTION 1: Cash on Delivery (Advance Courier Fee Required) */}
+                {/* OPTION 1: Cash on Delivery (100% COD - Zero Advance Fee) */}
                 <div
                   onClick={() => setPaymentType('advance_cod')}
                   className={`border rounded-2xl p-3.5 sm:p-4 flex items-center justify-between cursor-pointer transition-all ${
@@ -471,14 +482,14 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                     <div className="flex-1 min-w-0">
                       <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                         <span className="text-xs sm:text-sm font-bold text-black">
-                          Cash On Delivery
+                          Cash On Delivery (ক্যাশ অন ডেলিভারি)
                         </span>
-                        <span className="inline-flex shrink-0 text-[9px] sm:text-[10px] font-bold bg-[#800000] text-white px-2 py-0.5 rounded-full uppercase tracking-wider">
-                          Advance Courier Fee
+                        <span className="inline-flex shrink-0 text-[9px] sm:text-[10px] font-bold bg-[#800000] text-white px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                          100% Cash On Delivery
                         </span>
                       </div>
                       <span className="text-[11px] text-black font-medium block mt-1 leading-snug">
-                        Pay advance delivery charge <strong>৳{advanceDeliveryFee}</strong> now · Remaining <strong>৳{doorstepCodDue.toLocaleString()}</strong> in cash upon doorstep delivery.
+                        Pay full amount <strong>৳{totalAmount.toLocaleString()}</strong> in cash upon doorstep delivery. Zero advance payment required.
                       </span>
                     </div>
                   </div>
@@ -511,14 +522,14 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                     <div className="flex-1 min-w-0">
                       <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                         <span className="text-xs sm:text-sm font-bold text-black">
-                          Full Payment (100% Pre-paid)
+                          Full Payment (100% Pre-paid / বিকাশ ও নগদ)
                         </span>
-                        <span className="inline-flex shrink-0 text-[9px] sm:text-[10px] font-bold bg-neutral-900 text-white px-2 py-0.5 rounded-full uppercase tracking-wider">
+                        <span className="inline-flex shrink-0 text-[9px] sm:text-[10px] font-bold bg-neutral-900 text-white px-2.5 py-0.5 rounded-full uppercase tracking-wider">
                           0% COD At Doorstep
                         </span>
                       </div>
                       <span className="text-[11px] text-black font-medium block mt-1 leading-snug">
-                        Pay full order amount <strong>৳{totalAmount.toLocaleString()}</strong> (Product + Delivery) now · Zero cash collection (৳0) upon delivery.
+                        Pay full order amount <strong>৳{totalAmount.toLocaleString()}</strong> now via bKash or Nagad · Zero cash collection (৳0) upon delivery.
                       </span>
                     </div>
                   </div>
@@ -680,7 +691,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                 </div>
 
                 <div className="flex justify-between">
-                  <span className="font-bold text-black">Delivery Service</span>
+                  <span className="font-bold text-black">Standard Delivery Fee</span>
                   <span className="font-bold text-black font-sans tabular-nums">
                     ৳{advanceDeliveryFee}
                   </span>
@@ -691,20 +702,20 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                   <span className="font-bold text-black font-sans tabular-nums">৳0</span>
                 </div>
 
-                {/* Important Advance vs Doorstep COD Split */}
+                {/* Clear Payment Breakdown */}
                 <div className="p-3.5 bg-white rounded-xl border border-neutral-300 space-y-2 mt-2">
                   <div className="flex justify-between text-xs font-extrabold text-black">
                     <span>
-                      {paymentType === 'full_prepaid' ? 'Total Payable Now (100% Paid):' : 'Advance Payable Now (Deposit):'}
+                      {paymentType === 'full_prepaid' ? 'Total Payable Now (100% Pre-paid):' : 'Payable Now Online:'}
                     </span>
                     <span className="font-sans text-sm tabular-nums text-black">
-                      ৳{payableNow.toLocaleString()}
+                      {paymentType === 'full_prepaid' ? `৳${payableNow.toLocaleString()}` : '৳0 (Zero Online)'}
                     </span>
                   </div>
                   <div className="flex justify-between text-xs font-bold text-black">
                     <span>Payable on Doorstep Delivery:</span>
                     <span className="font-sans tabular-nums text-black">
-                      {paymentType === 'full_prepaid' ? '৳0 (No COD)' : `৳${doorstepCodDue.toLocaleString()}`}
+                      {paymentType === 'full_prepaid' ? '৳0 (Fully Paid)' : `৳${doorstepCodDue.toLocaleString()} (Cash On Delivery)`}
                     </span>
                   </div>
                 </div>
@@ -723,7 +734,9 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                   </>
                 ) : (
                   <span>
-                    Pay ৳{payableNow.toLocaleString()} {paymentType === 'full_prepaid' ? 'Full Payment' : 'Advance Courier Fee'}
+                    {paymentType === 'full_prepaid'
+                      ? `Proceed To Full Prepayment · ৳${totalAmount.toLocaleString()}`
+                      : `Confirm Cash On Delivery Order · ৳${totalAmount.toLocaleString()}`}
                   </span>
                 )}
               </button>
@@ -732,7 +745,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
         </form>
       </div>
 
-      {/* Payment Options Modal (Opens when customer clicks Pay button) */}
+      {/* Payment Options Modal (Opens only when customer chooses 100% Full Prepayment) */}
       {pendingOrder && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-xs animate-in fade-in"
@@ -746,7 +759,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
             <div className="sticky top-0 z-20 bg-white px-5 sm:px-6 py-4 border-b border-neutral-200 flex items-center justify-between shrink-0">
               <div>
                 <span className="text-[10px] font-bold tracking-widest text-[#800000] uppercase block">
-                  {paymentType === 'full_prepaid' ? 'Full Order Prepayment' : 'Advance Delivery Fee Verification'}
+                  Full Order Prepayment (100% Pre-paid)
                 </span>
                 <h3 className="font-serif text-lg sm:text-xl font-bold text-black mt-0.5">
                   Confirm ৳{payableNow.toLocaleString()} Payment
@@ -775,16 +788,12 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                   <span className="font-mono font-bold text-black">{pendingOrder.orderNumber}</span>
                 </div>
                 <div className="flex justify-between items-center text-xs">
-                  <span className="font-bold text-black">
-                    {paymentType === 'full_prepaid' ? 'Full Order Prepayment:' : 'Advance Courier Fee:'}
-                  </span>
+                  <span className="font-bold text-black">Full Order Prepayment:</span>
                   <span className="font-extrabold text-[#800000]">৳{payableNow.toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between items-center text-xs">
                   <span className="font-bold text-black">Doorstep COD Balance:</span>
-                  <span className="font-bold text-black">
-                    {paymentType === 'full_prepaid' ? '৳0 (Fully Paid)' : `৳${doorstepCodDue.toLocaleString()}`}
-                  </span>
+                  <span className="font-bold text-black">৳0 (Fully Paid)</span>
                 </div>
               </div>
 
@@ -795,13 +804,12 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                 </div>
               )}
 
-              {/* Gateway Notice Box (Matching User's Screenshot) */}
+              {/* Gateway Notice Box */}
               <div className="p-3.5 bg-white rounded-xl border border-neutral-300 flex items-start gap-2.5">
                 <Clock className="w-4 h-4 text-black shrink-0 mt-0.5" />
                 <div className="text-[11px] text-black leading-relaxed font-medium">
                   <strong className="font-bold text-black">Payment Notice: </strong>
-                  Our automated online card & instant payment gateway is being connected and will be live in 2 days. 
-                  Currently, please transfer <strong>৳{payableNow.toLocaleString()}</strong> {paymentType === 'full_prepaid' ? '(Full Order Value)' : '(Advance Delivery Fee)'} via bKash or Nagad, then enter your TrxID below to confirm your order.
+                  Please transfer <strong>৳{payableNow.toLocaleString()}</strong> (Full Order Value) via bKash or Nagad to our merchant/official wallet, then enter your TrxID below to confirm your order.
                 </div>
               </div>
 

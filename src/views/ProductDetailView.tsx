@@ -385,10 +385,10 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
             <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-6 sm:mb-8 gap-2">
               <div>
                 <span className="text-[11px] font-bold tracking-[0.2em] text-[#800000] uppercase block">
-                  {hasSameCategory ? 'SIMILAR SILHOUETTES' : 'MORE FROM OUR ATELIER'}
+                  MORE FROM THIS COLLECTION
                 </span>
                 <h2 className="font-serif text-2xl sm:text-3xl font-bold text-neutral-950 mt-1">
-                  {hasSameCategory ? 'Similar Products' : 'Other Products You May Love'}
+                  Similar Products
                 </h2>
               </div>
               <button

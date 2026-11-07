@@ -13,15 +13,16 @@ export const FloatingConcierge: React.FC = () => {
 
   return (
     <>
-      {/* Floating Circular Icon Button (Clean & text-free as requested) */}
+      {/* Floating Concierge Action Button with Contact Us text */}
       <div className="fixed bottom-20 md:bottom-6 right-4 sm:right-6 z-30 flex items-center">
         <button
           onClick={() => setIsOpen(!isOpen)}
-          className="w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-[#800000] hover:bg-[#5c0000] text-white flex items-center justify-center shadow-[0_8px_25px_rgba(128,0,0,0.35)] border-2 border-white transition-all duration-300 hover:scale-110 active:scale-95 cursor-pointer group"
-          aria-label="Contact Concierge"
-          title="Contact Concierge"
+          className="h-11 sm:h-12 px-3.5 sm:px-4 rounded-full bg-[#800000] hover:bg-[#600000] text-white flex items-center gap-2 shadow-[0_8px_25px_rgba(128,0,0,0.35)] border-2 border-white transition-all duration-300 hover:scale-105 active:scale-95 cursor-pointer group"
+          aria-label="Contact Us"
+          title="Contact Us"
         >
-          <MessageCircle className="w-5 h-5 transition-transform group-hover:scale-110" />
+          <MessageCircle className="w-5 h-5 transition-transform group-hover:scale-110 shrink-0" />
+          <span className="text-xs sm:text-[13px] font-bold tracking-wide select-none">Contact Us</span>
         </button>
       </div>
 
@@ -68,24 +69,24 @@ export const FloatingConcierge: React.FC = () => {
               <button
                 onClick={() =>
                   handleStartWhatsApp(
-                    'Hello! I would like to schedule an atelier appointment at Gulshan Dhaka.'
+                    'Hello! I would like to visit or contact the Tangail Atelier.'
                   )
                 }
                 className="w-full text-left text-xs p-3 rounded-xl border border-neutral-200 hover:border-[#800000] hover:bg-neutral-50 transition-all flex items-center justify-between group cursor-pointer"
               >
-                <span className="text-neutral-800 font-medium">Visit Gulshan Atelier Showroom</span>
+                <span className="text-neutral-800 font-medium">Visit Tangail Atelier</span>
                 <ArrowRight className="w-4 h-4 text-neutral-400 group-hover:text-[#800000] transition-colors" />
               </button>
 
               <button
                 onClick={() =>
                   handleStartWhatsApp(
-                    'Hello! I have a question regarding my advance delivery fee / cash on delivery order.'
+                    'Hello! I have a question regarding my HYDEE order or delivery.'
                   )
                 }
                 className="w-full text-left text-xs p-3 rounded-xl border border-neutral-200 hover:border-[#800000] hover:bg-neutral-50 transition-all flex items-center justify-between group cursor-pointer"
               >
-                <span className="text-neutral-800 font-medium">Order & Advance Payment Inquiry</span>
+                <span className="text-neutral-800 font-medium">Order & Delivery Assistance</span>
                 <ArrowRight className="w-4 h-4 text-neutral-400 group-hover:text-[#800000] transition-colors" />
               </button>
 

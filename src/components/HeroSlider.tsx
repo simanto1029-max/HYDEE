@@ -27,7 +27,7 @@ export const HeroSlider: React.FC<HeroSliderProps> = ({ onNavigate }) => {
               </h1>
               
               <p className="text-sm sm:text-base text-neutral-600 font-normal leading-relaxed max-w-lg">
-                Bespoke couture and contemporary silhouettes tailored from fine mulberry silks, hand-combed wool, and heritage weaves. Delivered to your doorstep across Bangladesh with advance booking and cash on delivery.
+                Bespoke couture and contemporary silhouettes tailored from fine mulberry silks, hand-combed wool, and heritage weaves. Delivered to your doorstep across Bangladesh with cash on delivery and secure prepayment.
               </p>
             </div>
 

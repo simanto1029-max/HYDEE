@@ -32,7 +32,6 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   if (!isOpen) return null;
 
   const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const estimatedAdvanceDeliveryFee = 80; // Standard Dhaka advance fee
 
   return (
     <div className="fixed inset-0 z-50 overflow-hidden animate-in fade-in duration-200">
@@ -140,31 +139,24 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
             )}
           </div>
 
-          {/* Drawer Footer with Advance Payment Notice & Checkout */}
+          {/* Drawer Footer with Checkout */}
           {items.length > 0 && (
             <div className="p-6 border-t border-neutral-100 bg-neutral-50/70 space-y-4">
               <div className="space-y-2 text-xs">
                 <div className="flex justify-between text-neutral-600">
                   <span>Bag Subtotal</span>
-                  <span className="font-semibold text-neutral-950">
+                  <span className="font-bold text-neutral-950 text-sm">
                     ৳{subtotal.toLocaleString()}
                   </span>
                 </div>
 
                 <div className="flex justify-between text-neutral-600">
                   <span className="flex items-center gap-1">
-                    Advance Delivery Payment
-                    <span className="text-[10px] text-neutral-400">(Dhaka Est.)</span>
+                    Standard Delivery Fee
+                    <span className="text-[10px] text-neutral-400">(Dhaka ৳80 / Outside ৳150)</span>
                   </span>
-                  <span className="font-semibold text-[#800000]">
-                    ৳{estimatedAdvanceDeliveryFee}
-                  </span>
-                </div>
-
-                <div className="flex justify-between text-neutral-600">
-                  <span>Remaining Cash On Delivery</span>
                   <span className="font-semibold text-neutral-800">
-                    ৳{subtotal.toLocaleString()}
+                    Calculated at Checkout
                   </span>
                 </div>
               </div>
@@ -173,7 +165,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
               <div className="bg-amber-50/80 border border-amber-200/60 rounded-xl p-3 text-[11px] text-amber-900 flex items-start gap-2">
                 <ShieldCheck className="w-4 h-4 text-[#800000] shrink-0 mt-0.5" />
                 <p className="leading-tight">
-                  <strong className="font-semibold">Cash On Delivery With Advance Fee:</strong> Pay only the delivery charge now to confirm booking. Pay remaining ৳{subtotal.toLocaleString()} in cash after inspecting at your doorstep.
+                  <strong className="font-semibold">Flexible Payment:</strong> Choose 100% Cash On Delivery (Zero Advance Payment) or Full Prepayment at checkout.
                 </p>
               </div>
 

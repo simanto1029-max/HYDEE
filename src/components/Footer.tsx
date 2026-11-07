@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { MessageCircle, Mail, Phone, MapPin, ShieldCheck, FileText, Truck } from 'lucide-react';
+import { MessageCircle, Mail, Phone, MapPin, ShieldCheck, FileText, ExternalLink } from 'lucide-react';
 import { store } from '../services/store';
 
 interface FooterProps {
@@ -19,27 +19,31 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
   }, []);
 
   const cleanWhatsapp = (settings.whatsappNumber || '8801700000000').replace(/[^0-9]/g, '');
-  const locationText = settings.tangailLocation || settings.address || 'Main Atelier, Tangail, Dhaka Division, Bangladesh';
+  const locationText = settings.tangailLocation || settings.address || 'Tangail, Dhaka Division, Bangladesh';
 
   const handleWhatsAppChat = () => {
-    const text = encodeURIComponent('Hello HYDEE Concierge, I would like personal styling and bespoke assistance.');
+    const text = encodeURIComponent('Hello HYDEE Concierge, I would like personal assistance with my order.');
     window.open(`https://wa.me/${cleanWhatsapp}?text=${text}`, '_blank');
   };
 
   return (
-    <footer className="w-full bg-[#FAF9F7] pt-8 pb-14 px-4 sm:px-6 lg:px-8 font-sans">
-      <div className="max-w-6xl mx-auto bg-white rounded-2xl border border-neutral-200/80 shadow-xs p-6 sm:p-10">
+    <footer className="w-full bg-[#FAF9F7] pt-4 pb-4 px-3 sm:px-6 lg:px-8 font-sans">
+      <div className="max-w-6xl mx-auto bg-white rounded-2xl border border-neutral-200/80 shadow-xs p-5 sm:p-7">
         
-        {/* Main 2-Column Split: Left Side (Policies) & Right Side (Location, Contact & Numbers) */}
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-8 pb-8 border-b border-neutral-100 items-start">
+        {/* Main 3-Column Split:
+            Col 1 (Left): Brand Identity & Legal Charters (Privacy Policy, Terms & Conditions)
+            Col 2 (Middle): Atelier Location & Direct Helpline (Address, Hotline, WhatsApp, Support Email)
+            Col 3 (Right): Interactive Google Map Embed of Tangail Atelier
+        */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-6 sm:gap-8 items-start">
           
-          {/* LEFT SIDE (বামপাশে): Brand Identity, Legal & Policies */}
-          <div className="md:col-span-6 space-y-4">
+          {/* LEFT COLUMN: Brand Identity & Legal Charters (lg:col-span-4) */}
+          <div className="lg:col-span-4 space-y-4">
             <div>
               <span className="font-serif tracking-[0.25em] text-2xl font-bold text-[#800000] block">
                 HYDEE
               </span>
-              <p className="text-xs text-neutral-500 font-medium mt-1 max-w-sm">
+              <p className="text-xs text-neutral-500 font-medium mt-1 max-w-sm leading-relaxed">
                 Bespoke luxury for every occasion, crafted in Bangladesh.
               </p>
             </div>
@@ -67,21 +71,12 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
                   <FileText className="w-3.5 h-3.5 text-[#800000]" />
                   <span>Terms & Conditions</span>
                 </button>
-
-                <button
-                  type="button"
-                  onClick={() => onNavigate('/legal/deposit')}
-                  className="hover:text-neutral-900 font-medium text-neutral-600 transition-colors cursor-pointer inline-flex items-center gap-2 self-start"
-                >
-                  <Truck className="w-3.5 h-3.5 text-neutral-400" />
-                  <span>Advance Courier Deposit Terms</span>
-                </button>
               </div>
             </div>
           </div>
 
-          {/* RIGHT SIDE (ডানপাশে): Tangail Location, Helpline Number, WhatsApp & Email */}
-          <div className="md:col-span-6 space-y-4 md:border-l md:border-neutral-100 md:pl-8">
+          {/* MIDDLE COLUMN: Tangail Location, Helpline Number, WhatsApp & Email (lg:col-span-4) */}
+          <div className="lg:col-span-4 space-y-4 lg:border-l lg:border-neutral-100 lg:pl-6">
             <span className="text-[10px] font-bold tracking-[0.2em] text-neutral-400 uppercase block">
               Atelier Location & Direct Helpline
             </span>
@@ -112,10 +107,10 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
                     Customer Hotline:
                   </span>
                   <a
-                    href={`tel:${settings.hotlinePhone}`}
+                    href={`tel:${settings.hotlinePhone || '+880 1711-002233'}`}
                     className="font-bold text-neutral-900 hover:text-[#800000] transition-colors"
                   >
-                    {settings.hotlinePhone || '+880 1700-000000'}
+                    {settings.hotlinePhone || '+880 1711-002233'}
                   </a>
                 </div>
               </div>
@@ -134,7 +129,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
                     onClick={handleWhatsAppChat}
                     className="font-bold text-emerald-800 hover:underline transition-colors cursor-pointer"
                   >
-                    {settings.whatsappNumber || '01700-000000'} (Click to Chat)
+                    {settings.whatsappNumber || '01711002233'} (Click to Chat)
                   </button>
                 </div>
               </div>
@@ -149,28 +144,51 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
                     Official Support Email:
                   </span>
                   <a
-                    href={`mailto:${settings.supportEmail}`}
+                    href={`mailto:${settings.supportEmail && !settings.supportEmail.includes('@hydee.com') ? settings.supportEmail : 'support@hydee.shop'}`}
                     className="font-medium text-neutral-800 hover:text-[#800000] transition-colors"
                   >
-                    {settings.supportEmail || 'support@hydee.com'}
+                    {settings.supportEmail && !settings.supportEmail.includes('@hydee.com') ? settings.supportEmail : 'support@hydee.shop'}
                   </a>
                 </div>
               </div>
             </div>
           </div>
 
-        </div>
+          {/* RIGHT COLUMN: Google Map Embed of Tangail Atelier (lg:col-span-4) */}
+          <div className="lg:col-span-4 space-y-2.5 md:col-span-2 lg:border-l lg:border-neutral-100 lg:pl-6">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold tracking-[0.2em] text-neutral-400 uppercase block">
+                Atelier Google Map
+              </span>
+              <a
+                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(locationText)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[10px] font-bold text-[#800000] hover:underline inline-flex items-center gap-1 cursor-pointer"
+              >
+                <span>Open Map</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
 
-        {/* Bottom Minimal Copyright Bar */}
-        <div className="pt-4 flex flex-col sm:flex-row items-center justify-between text-[11px] text-neutral-400 gap-2">
-          <p>© 2026 HYDEE Atelier. All Rights Reserved. Handcrafted in Tangail, Bangladesh.</p>
-          <button
-            type="button"
-            onClick={() => onNavigate('/admin')}
-            className="text-[10px] text-neutral-400 hover:text-neutral-700 transition-colors cursor-pointer"
-          >
-            Atelier Portal
-          </button>
+            <div className="w-full h-44 sm:h-48 rounded-xl overflow-hidden border border-neutral-200 bg-neutral-100 shadow-xs relative">
+              <iframe
+                title="HYDEE Tangail Atelier Location Map"
+                src={`https://maps.google.com/maps?q=${encodeURIComponent(locationText)}&t=&z=13&ie=UTF8&iwloc=&output=embed`}
+                width="100%"
+                height="100%"
+                style={{ border: 0 }}
+                loading="lazy"
+                referrerPolicy="no-referrer-when-downgrade"
+                className="w-full h-full"
+              />
+            </div>
+            <p className="text-[11px] text-neutral-500 flex items-center gap-1.5 font-medium">
+              <MapPin className="w-3.5 h-3.5 text-[#800000] shrink-0" />
+              <span className="truncate">{locationText}</span>
+            </p>
+          </div>
+
         </div>
 
       </div>

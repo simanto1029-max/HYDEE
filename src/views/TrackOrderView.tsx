@@ -205,7 +205,7 @@ export const TrackOrderView: React.FC<TrackOrderViewProps> = ({ onNavigate }) =>
                         <AlertCircle className="w-3.5 h-3.5 text-red-700" />
                         <span>Order Cancelled</span>
                       </>
-                    ) : searchedOrder.paymentStatus === 'ADVANCE_VERIFIED' ? (
+                    ) : searchedOrder.paymentStatus === 'ADVANCE_VERIFIED' || searchedOrder.paymentStatus === 'FULLY_PAID' || searchedOrder.status === 'CONFIRMED' || searchedOrder.status === 'PROCESSING' ? (
                       <>
                         <Package className="w-3.5 h-3.5 text-amber-700" />
                         <span>Confirmed · Atelier Packaging</span>
@@ -213,7 +213,7 @@ export const TrackOrderView: React.FC<TrackOrderViewProps> = ({ onNavigate }) =>
                     ) : (
                       <>
                         <Clock className="w-3.5 h-3.5 text-neutral-600" />
-                        <span>Awaiting Advance Payment</span>
+                        <span>Awaiting Payment Confirmation</span>
                       </>
                     )}
                   </span>
@@ -243,16 +243,16 @@ export const TrackOrderView: React.FC<TrackOrderViewProps> = ({ onNavigate }) =>
                     </div>
                   </div>
 
-                  {/* Step 2: Advance Delivery Payment */}
+                  {/* Step 2: Payment & Booking Confirmation */}
                   <div className="relative">
                     <span
                       className={`absolute -left-[31px] sm:-left-[39px] top-0.5 w-6 h-6 rounded-full flex items-center justify-center ring-4 ring-white shadow-xs ${
-                        searchedOrder.paymentStatus === 'ADVANCE_VERIFIED' || currentStage >= 3
+                        searchedOrder.status === 'CONFIRMED' || searchedOrder.paymentStatus === 'ADVANCE_VERIFIED' || searchedOrder.paymentStatus === 'FULLY_PAID' || currentStage >= 3
                           ? 'bg-emerald-600 text-white'
                           : 'bg-amber-500 text-white animate-pulse'
                       }`}
                     >
-                      {searchedOrder.paymentStatus === 'ADVANCE_VERIFIED' || currentStage >= 3 ? (
+                      {searchedOrder.status === 'CONFIRMED' || searchedOrder.paymentStatus === 'ADVANCE_VERIFIED' || searchedOrder.paymentStatus === 'FULLY_PAID' || currentStage >= 3 ? (
                         <Check className="w-3.5 h-3.5 stroke-[3]" />
                       ) : (
                         <Clock className="w-3 h-3" />
@@ -260,17 +260,17 @@ export const TrackOrderView: React.FC<TrackOrderViewProps> = ({ onNavigate }) =>
                     </span>
                     <div>
                       <h4 className="font-semibold text-xs sm:text-sm text-neutral-900">
-                        Advance Delivery Charge Verification
+                        {searchedOrder.paymentType === 'advance_cod' ? 'Cash On Delivery Confirmed' : 'Full Prepayment Verification'}
                       </h4>
-                      {searchedOrder.paymentStatus === 'ADVANCE_VERIFIED' || currentStage >= 3 ? (
+                      {searchedOrder.paymentType === 'advance_cod' || searchedOrder.status === 'CONFIRMED' || searchedOrder.paymentStatus === 'ADVANCE_VERIFIED' || searchedOrder.paymentStatus === 'FULLY_PAID' || currentStage >= 3 ? (
                         <p className="text-[11px] text-emerald-700 mt-0.5">
-                          ✓ Advance delivery fee of ৳{searchedOrder.advanceDeliveryFee} verified via{' '}
-                          <span className="uppercase font-semibold">{searchedOrder.advancePaymentMethod || 'Gateway'}</span>
-                          {searchedOrder.transactionId ? ` (TrxID: ${searchedOrder.transactionId})` : ''}.
+                          {searchedOrder.paymentType === 'advance_cod'
+                            ? `✓ 100% Cash On Delivery confirmed. Full amount of ৳${searchedOrder.totalAmount.toLocaleString()} payable at doorstep.`
+                            : `✓ Full prepayment verified via ${searchedOrder.advancePaymentMethod ? searchedOrder.advancePaymentMethod.toUpperCase() : 'bKash/Nagad'}${searchedOrder.transactionId ? ` (TrxID: ${searchedOrder.transactionId})` : ''}. 0% COD due.`}
                         </p>
                       ) : (
                         <p className="text-[11px] text-amber-700 mt-0.5">
-                          Waiting for ৳{searchedOrder.advanceDeliveryFee} advance verification to release parcel from hold.
+                          Waiting for prepayment verification to release parcel from hold.
                         </p>
                       )}
                     </div>
@@ -449,10 +449,9 @@ export const TrackOrderView: React.FC<TrackOrderViewProps> = ({ onNavigate }) =>
                   </span>
                 </div>
                 <div className="flex justify-between text-neutral-600">
-                  <span>Advance Delivery Fee:</span>
-                  <span className="font-sans font-bold text-emerald-700 tabular-nums">
-                    ৳{searchedOrder.advanceDeliveryFee}{' '}
-                    {searchedOrder.paymentStatus === 'ADVANCE_VERIFIED' ? '(Verified)' : '(Pending)'}
+                  <span>Standard Delivery Fee:</span>
+                  <span className="font-sans font-bold text-neutral-900 tabular-nums">
+                    ৳{searchedOrder.advanceDeliveryFee}
                   </span>
                 </div>
                 {searchedOrder.discountAmount > 0 && (
@@ -468,14 +467,16 @@ export const TrackOrderView: React.FC<TrackOrderViewProps> = ({ onNavigate }) =>
                   <span className="font-sans tabular-nums">৳{searchedOrder.totalAmount.toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between pt-1 border-t border-neutral-200/60 text-xs">
-                  <span className="font-semibold text-neutral-700">Remaining Cash on Delivery:</span>
+                  <span className="font-semibold text-neutral-700">Payable on Doorstep Delivery:</span>
                   <span className="font-sans font-bold text-[#800000] tabular-nums">
-                    {isDelivered ? (
+                    {searchedOrder.paymentType === 'full_prepaid' ? (
+                      <span className="text-emerald-700 font-bold">৳0 (100% Pre-paid)</span>
+                    ) : isDelivered ? (
                       <span className="text-emerald-700">
                         ৳{searchedOrder.remainingCodAmount.toLocaleString()} (Paid in Full)
                       </span>
                     ) : (
-                      <span>৳{searchedOrder.remainingCodAmount.toLocaleString()} (Due on Arrival)</span>
+                      <span>৳{searchedOrder.remainingCodAmount.toLocaleString()} (Cash On Delivery)</span>
                     )}
                   </span>
                 </div>
@@ -487,7 +488,7 @@ export const TrackOrderView: React.FC<TrackOrderViewProps> = ({ onNavigate }) =>
                   onClick={() => onNavigate('/')}
                   className="text-xs text-[#800000] hover:underline font-semibold cursor-pointer inline-flex items-center gap-1"
                 >
-                  <span>Return To Atelier Boutique</span>
+                  <span>Return To HYDEE Storefront</span>
                   <ArrowRight className="w-3.5 h-3.5" />
                 </button>
               </div>
