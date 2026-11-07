@@ -362,7 +362,7 @@ class StoreService {
   }
 
   getSimilarProducts(product: Product, limit: number = 4): Product[] {
-    // If manual recommendations are configured
+    // 1. If manual recommendations are configured
     if (product.manualRecommendationIds && product.manualRecommendationIds.length > 0) {
       const recs = this.products.filter(
         (p) => !p.isArchived && p.id !== product.id && product.manualRecommendationIds?.includes(p.id)
@@ -370,10 +370,40 @@ class StoreService {
       if (recs.length > 0) return recs.slice(0, limit);
     }
 
-    // Default: category match + tag match
-    return this.products
-      .filter((p) => !p.isArchived && p.id !== product.id && (p.categorySlug === product.categorySlug || p.tags.some((t) => product.tags.includes(t))))
-      .slice(0, limit);
+    // 2. Direct similar matches: same category or matching tags
+    const directMatches = this.products.filter(
+      (p) =>
+        !p.isArchived &&
+        p.id !== product.id &&
+        (p.categorySlug === product.categorySlug ||
+          (Array.isArray(p.tags) && Array.isArray(product.tags) && p.tags.some((t) => product.tags.includes(t))))
+    );
+
+    if (directMatches.length >= limit) {
+      return directMatches.slice(0, limit);
+    }
+
+    // 3. Fallback: if not enough direct matches, fill with other available store products
+    const selectedIds = new Set<string>([product.id, ...directMatches.map((p) => p.id)]);
+    const otherStoreProducts = this.products.filter(
+      (p) => !p.isArchived && !selectedIds.has(p.id)
+    );
+
+    const result: Product[] = [...directMatches, ...otherStoreProducts];
+    if (result.length >= limit) {
+      return result.slice(0, limit);
+    }
+
+    // 4. Atelier archive fallback: if the database has only 1 product, pull other pieces from ALL_DEMO_PRODUCTS so section always has recommendations
+    for (const demoP of ALL_DEMO_PRODUCTS) {
+      if (result.length >= limit) break;
+      if (!selectedIds.has(demoP.id) && demoP.id !== product.id && demoP.slug !== product.slug) {
+        result.push(demoP);
+        selectedIds.add(demoP.id);
+      }
+    }
+
+    return result.slice(0, limit);
   }
 
   generateUniqueSlug(name: string, excludeId?: string): string {

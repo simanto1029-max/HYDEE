@@ -128,6 +128,7 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
   const availableColors = Array.from(colorMap.values());
 
   const similarProducts = store.getSimilarProducts(product, 4);
+  const hasSameCategory = similarProducts.some((p) => p.categorySlug === product.categorySlug);
 
   const handleAddToCartClick = () => {
     onAddToCart(product, selectedVariant?.id, tierQuantity, effectiveUnitPrice);
@@ -352,23 +353,24 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
               </button>
             </div>
 
-            {/* Product Description Underneath Add To Bag Button (Compact & Clean) */}
-            <div className="mt-4 pt-4 border-t border-neutral-100 space-y-2">
-              <h4 className="text-[11px] font-bold text-neutral-400 uppercase tracking-wider">
-                Product Details
+            {/* Product Description Underneath Add To Bag Button (Increased Font Size & Elegance) */}
+            <div className="mt-5 pt-5 border-t border-neutral-200/80 space-y-3">
+              <h4 className="text-xs sm:text-sm font-bold text-neutral-900 uppercase tracking-widest flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#800000]" />
+                <span>Product Details</span>
               </h4>
-              <p className="font-['Hind_Siliguri',sans-serif] text-xs sm:text-[13px] text-neutral-700 leading-relaxed font-normal">
+              <p className="font-['Hind_Siliguri',sans-serif] text-[15px] sm:text-base md:text-[17px] text-neutral-800 leading-relaxed font-normal">
                 {product.description || product.shortDescription}
               </p>
               {product.specifications?.fabric && (
-                <div className="pt-1.5 grid grid-cols-2 gap-2 text-[11px] text-neutral-600 bg-neutral-50/80 p-2.5 rounded-xl border border-neutral-100">
+                <div className="pt-2 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs sm:text-sm text-neutral-700 bg-neutral-50 p-3.5 rounded-xl border border-neutral-200/80">
                   <div>
-                    <strong className="text-neutral-900 block font-semibold">Fabric:</strong>
-                    <span>{product.specifications.fabric}</span>
+                    <strong className="text-neutral-950 block font-semibold mb-0.5">Fabric:</strong>
+                    <span className="leading-snug">{product.specifications.fabric}</span>
                   </div>
                   <div>
-                    <strong className="text-neutral-900 block font-semibold">Care:</strong>
-                    <span>{product.specifications.care}</span>
+                    <strong className="text-neutral-950 block font-semibold mb-0.5">Care:</strong>
+                    <span className="leading-snug">{product.specifications.care}</span>
                   </div>
                 </div>
               )}
@@ -377,18 +379,39 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
           </div>
         </div>
 
-        {/* Similar Outfits Section */}
+        {/* Similar & Other Recommended Products Section */}
         {similarProducts.length > 0 && (
-          <div className="mt-16 pt-10 border-t border-neutral-200/80">
-            <h2 className="font-serif text-2xl font-normal text-neutral-950 mb-6">
-              Complete The Look
-            </h2>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="mt-14 sm:mt-20 pt-10 sm:pt-14 border-t border-neutral-200/80">
+            <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-6 sm:mb-8 gap-2">
+              <div>
+                <span className="text-[11px] font-bold tracking-[0.2em] text-[#800000] uppercase block">
+                  {hasSameCategory ? 'SIMILAR SILHOUETTES' : 'MORE FROM OUR ATELIER'}
+                </span>
+                <h2 className="font-serif text-2xl sm:text-3xl font-bold text-neutral-950 mt-1">
+                  {hasSameCategory ? 'Similar Products' : 'Other Products You May Love'}
+                </h2>
+              </div>
+              <button
+                onClick={() => {
+                  onNavigate('/products');
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                className="text-xs font-bold text-[#800000] hover:text-black uppercase tracking-wider self-start sm:self-auto cursor-pointer flex items-center gap-1.5 transition-colors"
+              >
+                <span>View Full Collection</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
               {similarProducts.map((p) => (
                 <ProductCard
                   key={p.id}
                   product={p}
-                  onSelectProduct={(s) => onNavigate(`/products/${s}`)}
+                  onSelectProduct={(s) => {
+                    onNavigate(`/products/${s}`);
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
                   onAddToCart={(prod) => onAddToCart(prod)}
                   onBuyNow={(prod) => onBuyNow(prod)}
                 />
