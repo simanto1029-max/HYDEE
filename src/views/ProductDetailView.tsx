@@ -24,6 +24,7 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
     product?.variants[0]?.id || ''
   );
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+  const [colorPreviewImage, setColorPreviewImage] = useState<string | null>(null);
   const [selectedTierIndex, setSelectedTierIndex] = useState(1); // Default to Most Popular (Buy 2)
 
   useEffect(() => {
@@ -32,6 +33,7 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
         setSelectedVariantId(product.variants[0].id);
       }
       setSelectedImageIndex(0);
+      setColorPreviewImage(null);
 
       // Always pre-select Most Popular tier by default
       const tiers = (product.bundleTiers && product.bundleTiers.length > 0)
@@ -74,7 +76,7 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
   }
 
   const selectedVariant = product.variants.find((v) => v.id === selectedVariantId) || product.variants[0];
-  const unitPrice = selectedVariant?.price || product.price;
+  const unitPrice = Number(selectedVariant?.price || product.price);
   const currentCompareAt = selectedVariant?.compareAtPrice || product.compareAtPrice;
 
   // Distinct stock calculation per product
@@ -111,7 +113,7 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
 
   const currentTier = activeTiers[selectedTierIndex] || activeTiers[0];
   const tierQuantity = currentTier.quantity;
-  const tierTotalPrice = currentTier.price ?? (unitPrice * tierQuantity);
+  const tierTotalPrice = selectedTierIndex === 0 ? unitPrice : (currentTier.price ?? (unitPrice * tierQuantity));
   const effectiveUnitPrice = Math.round(tierTotalPrice / tierQuantity);
 
   // Extract unique colors for interactive color circles
@@ -159,7 +161,7 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
             {/* Main Image Frame (Full generous aspect ratio on desktop) */}
             <div className="relative aspect-[4/5] sm:aspect-[3/4] lg:aspect-[4/5] max-h-[560px] lg:max-h-[640px] w-full rounded-2xl overflow-hidden bg-[#F7F6F3] border border-neutral-200/80 shadow-xs">
               <img
-                src={product.images[selectedImageIndex] || product.images[0]}
+                src={colorPreviewImage || product.images[selectedImageIndex] || product.images[0]}
                 alt={product.name}
                 className="w-full h-full object-cover object-center transition-transform duration-500"
               />
@@ -170,9 +172,12 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
               {product.images.map((img, idx) => (
                 <button
                   key={idx}
-                  onClick={() => setSelectedImageIndex(idx)}
+                  onClick={() => {
+                    setColorPreviewImage(null);
+                    setSelectedImageIndex(idx);
+                  }}
                   className={`w-14 h-16 sm:w-18 sm:h-20 rounded-xl overflow-hidden shrink-0 border-2 transition-all cursor-pointer ${
-                    selectedImageIndex === idx
+                    (colorPreviewImage === img || (!colorPreviewImage && selectedImageIndex === idx))
                       ? 'border-[#800000] ring-1 ring-[#800000] scale-102 shadow-xs'
                       : 'border-neutral-200 opacity-60 hover:opacity-100'
                   }`}
@@ -255,9 +260,11 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                             const matched = product.variants.find((v) => v.color === col.name);
                             if (matched) setSelectedVariantId(matched.id);
 
-                            // Sync main gallery photo if image matches
-                            const imgIdx = product.images.findIndex((img) => img === col.imageUrl);
-                            if (imgIdx >= 0) setSelectedImageIndex(imgIdx);
+                            if (col.imageUrl) {
+                              setColorPreviewImage(col.imageUrl);
+                              const imgIdx = product.images.findIndex((img) => img === col.imageUrl);
+                              if (imgIdx >= 0) setSelectedImageIndex(imgIdx);
+                            }
                           }}
                           className="flex flex-col items-center group cursor-pointer shrink-0 focus:outline-hidden"
                         >
@@ -354,7 +361,7 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
               <div className="space-y-2">
                 {activeTiers.map((tier, idx) => {
                   const isSelected = selectedTierIndex === idx;
-                  const displayTierPrice = tier.price ?? (unitPrice * tier.quantity);
+                  const displayTierPrice = idx === 0 ? unitPrice : (tier.price ?? (unitPrice * tier.quantity));
                   const regularTierPrice = (currentCompareAt || unitPrice) * tier.quantity;
 
                   return (

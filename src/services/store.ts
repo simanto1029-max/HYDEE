@@ -211,8 +211,16 @@ class StoreService {
       localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(this.settings));
       localStorage.setItem(STORAGE_KEYS.PROMO, JSON.stringify(this.promoPopup));
       localStorage.setItem(STORAGE_KEYS.LOGS, JSON.stringify(this.auditLogs));
-    } catch (e) {
-      console.error('Error persisting state:', e);
+    } catch (e: any) {
+      console.warn('Storage quota warning, recovering space for products:', e);
+      try {
+        localStorage.removeItem(STORAGE_KEYS.LOGS);
+        localStorage.removeItem(STORAGE_KEYS.COUPONS);
+        localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(this.products));
+        localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(this.categories));
+      } catch (err2) {
+        console.error('Failed to recover storage space:', err2);
+      }
     }
     this.notify();
   }
@@ -544,7 +552,11 @@ class StoreService {
         is_featured: saved.isFeatured,
         is_hanger_featured: saved.isHangerFeatured,
         is_archived: saved.isArchived,
-      }).then(() => {});
+      }).then(({ error }) => {
+        if (error) {
+          console.error('Supabase product sync error:', error.message, error.details);
+        }
+      });
     }
 
     return saved;

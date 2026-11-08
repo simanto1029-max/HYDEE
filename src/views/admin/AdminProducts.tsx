@@ -134,20 +134,51 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ onNavigateToProduc
     setProducts(store.getProducts());
   };
 
-  // Image Upload & Reorder Helpers
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    if (files.length === 0) return;
-    files.forEach((file) => {
+  // Client-side image compression: prevents large camera uploads from exceeding browser storage limits
+  const compressImageFile = (file: File): Promise<string> => {
+    return new Promise((resolve) => {
       const reader = new FileReader();
-      reader.onload = (evt) => {
-        if (evt.target?.result) {
-          const resultUrl = evt.target.result as string;
-          setFormImagesList((prev) => [...prev, resultUrl]);
-        }
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const MAX_WIDTH = 1200;
+          let width = img.width;
+          let height = img.height;
+          if (width > MAX_WIDTH) {
+            height = Math.round((height * MAX_WIDTH) / width);
+            width = MAX_WIDTH;
+          }
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, width, height);
+            resolve(canvas.toDataURL('image/jpeg', 0.82));
+          } else {
+            resolve(e.target?.result as string);
+          }
+        };
+        img.onerror = () => resolve(e.target?.result as string);
+        img.src = e.target?.result as string;
       };
+      reader.onerror = () => resolve('');
       reader.readAsDataURL(file);
     });
+  };
+
+  // Image Upload & Reorder Helpers
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    try {
+      const compressedPromises = files.map((file) => compressImageFile(file));
+      const results = await Promise.all(compressedPromises);
+      const valid = results.filter(Boolean);
+      setFormImagesList((prev) => [...prev, ...valid]);
+    } catch (err) {
+      console.error('Error compressing uploaded files:', err);
+    }
     if (e.target) e.target.value = '';
   };
 
@@ -735,7 +766,13 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ onNavigateToProduc
                     type="number"
                     required
                     value={formPrice}
-                    onChange={(e) => setFormPrice(Number(e.target.value))}
+                    onChange={(e) => {
+                      const newP = Number(e.target.value);
+                      setFormPrice(newP);
+                      setFormTier1Price(newP);
+                      setFormTier2Price(Math.round(newP * 2 * 0.9));
+                      setFormTier3Price(Math.round(newP * 3 * 0.8));
+                    }}
                     className="w-full p-3 border border-neutral-200 rounded-xl focus:border-[#800000] focus:outline-hidden"
                   />
                 </div>
@@ -850,74 +887,113 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ onNavigateToProduc
                   প্রত্যেকটি কালারের নাম এবং মডেল ছবির URL দিন। স্টোরফ্রন্টে সুন্দর স্কয়ার কার্ড এবং গ্রিন টিকমার্ক সহ প্রদর্শিত হবে।
                 </p>
 
-                <div className="space-y-2.5">
+                <div className="space-y-3">
                   {formColors.map((col, cIdx) => (
                     <div
                       key={cIdx}
-                      className="bg-white p-3 rounded-xl border border-neutral-200 flex flex-col sm:flex-row items-center gap-3"
+                      className="bg-white p-3.5 rounded-2xl border border-neutral-200 space-y-3 shadow-xs"
                     >
-                      {/* Image Thumbnail Preview */}
-                      <div className="w-12 h-12 rounded-lg border border-neutral-300 overflow-hidden bg-neutral-100 shrink-0 relative">
-                        {col.imageUrl ? (
-                          <img src={col.imageUrl} alt={col.name} className="w-full h-full object-cover" />
-                        ) : (
-                          <div
-                            className="w-full h-full flex items-center justify-center font-bold text-[9px] text-white"
-                            style={{ backgroundColor: col.colorHex || '#800000' }}
-                          >
-                            {col.name.slice(0, 3)}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Color Name */}
-                      <div className="flex-1 w-full sm:w-auto">
-                        <label className="block text-[10px] text-neutral-500 font-semibold mb-0.5">Color Name</label>
-                        <input
-                          type="text"
-                          value={col.name}
-                          onChange={(e) => handleUpdateColor(cIdx, 'name', e.target.value)}
-                          placeholder="e.g. Blue, Black, Dark Red"
-                          className="w-full p-2 border border-neutral-200 rounded-lg text-xs font-semibold"
-                        />
-                      </div>
-
-                      {/* Color Thumbnail Image URL */}
-                      <div className="flex-1 w-full sm:w-auto">
-                        <label className="block text-[10px] text-neutral-500 font-semibold mb-0.5">Model / Swatch Image URL</label>
-                        <input
-                          type="text"
-                          value={col.imageUrl || ''}
-                          onChange={(e) => handleUpdateColor(cIdx, 'imageUrl', e.target.value)}
-                          placeholder="https://... or select photo"
-                          className="w-full p-2 border border-neutral-200 rounded-lg text-xs font-mono text-[11px]"
-                        />
-                      </div>
-
-                      {/* Color Hex */}
-                      <div className="w-20 shrink-0">
-                        <label className="block text-[10px] text-neutral-500 font-semibold mb-0.5">Tone</label>
-                        <div className="flex items-center gap-1.5">
-                          <input
-                            type="color"
-                            value={col.colorHex || '#800000'}
-                            onChange={(e) => handleUpdateColor(cIdx, 'colorHex', e.target.value)}
-                            className="w-7 h-7 rounded border border-neutral-300 cursor-pointer p-0"
-                          />
-                          <span className="text-[10px] font-mono text-neutral-500 truncate">{col.colorHex}</span>
+                      <div className="flex flex-col sm:flex-row items-center gap-3">
+                        {/* Image Thumbnail Preview */}
+                        <div className="w-14 h-14 rounded-xl border border-neutral-300 overflow-hidden bg-neutral-100 shrink-0 relative shadow-xs">
+                          {col.imageUrl ? (
+                            <img src={col.imageUrl} alt={col.name} className="w-full h-full object-cover" />
+                          ) : (
+                            <div
+                              className="w-full h-full flex items-center justify-center font-bold text-[10px] text-white"
+                              style={{ backgroundColor: col.colorHex || '#800000' }}
+                            >
+                              {col.name.slice(0, 3)}
+                            </div>
+                          )}
                         </div>
+
+                        {/* Color Name */}
+                        <div className="flex-1 w-full sm:w-auto">
+                          <label className="block text-[10px] text-neutral-500 font-semibold mb-0.5">Color Name (কালারের নাম)</label>
+                          <input
+                            type="text"
+                            value={col.name}
+                            onChange={(e) => handleUpdateColor(cIdx, 'name', e.target.value)}
+                            placeholder="e.g. Royal Crimson, Sky Blue, Mustard Yellow"
+                            className="w-full p-2 border border-neutral-200 rounded-lg text-xs font-semibold"
+                          />
+                        </div>
+
+                        {/* Color Tone / Hex */}
+                        <div className="w-24 shrink-0">
+                          <label className="block text-[10px] text-neutral-500 font-semibold mb-0.5">Tone (কালার)</label>
+                          <div className="flex items-center gap-1.5">
+                            <input
+                              type="color"
+                              value={col.colorHex || '#800000'}
+                              onChange={(e) => handleUpdateColor(cIdx, 'colorHex', e.target.value)}
+                              className="w-8 h-8 rounded-lg border border-neutral-300 cursor-pointer p-0"
+                            />
+                            <span className="text-[10px] font-mono text-neutral-500 truncate">{col.colorHex}</span>
+                          </div>
+                        </div>
+
+                        {/* Delete */}
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveColorOption(cIdx)}
+                          disabled={formColors.length <= 1}
+                          className="p-2 text-neutral-400 hover:text-red-600 disabled:opacity-20 cursor-pointer"
+                          title="Remove Color"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </div>
 
-                      {/* Delete */}
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveColorOption(cIdx)}
-                        disabled={formColors.length <= 1}
-                        className="p-2 text-neutral-400 hover:text-red-600 disabled:opacity-20 cursor-pointer"
-                        title="Remove Color"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      {/* Clickable Photo Selector from Uploaded Gallery Photos */}
+                      {formImagesList.length > 0 ? (
+                        <div className="pt-2 border-t border-neutral-100">
+                          <div className="flex items-center justify-between mb-1.5">
+                            <span className="text-[11px] font-bold text-neutral-800">
+                              📷 Select Photo for &quot;{col.name || `Color ${cIdx + 1}`}&quot; (আপলোড করা ছবিগুলো থেকে সিলেক্ট করুন):
+                            </span>
+                            {col.imageUrl && (
+                              <span className="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                                Photo Connected ✓
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2.5 overflow-x-auto py-1">
+                            {formImagesList.map((uploadedImg, uIdx) => {
+                              const isSelectedImg = col.imageUrl === uploadedImg;
+                              return (
+                                <button
+                                  key={uIdx}
+                                  type="button"
+                                  onClick={() => handleUpdateColor(cIdx, 'imageUrl', uploadedImg)}
+                                  className={`relative w-14 h-16 sm:w-16 sm:h-20 rounded-xl overflow-hidden border-2 transition-all shrink-0 cursor-pointer ${
+                                    isSelectedImg
+                                      ? 'border-emerald-500 ring-2 ring-emerald-400/40 scale-105 shadow-md'
+                                      : 'border-neutral-200 hover:border-neutral-400 opacity-60 hover:opacity-100 shadow-xs'
+                                  }`}
+                                  title={`Select Photo ${uIdx + 1} for ${col.name}`}
+                                >
+                                  <img src={uploadedImg} alt={`Upload ${uIdx + 1}`} className="w-full h-full object-cover" />
+                                  {isSelectedImg ? (
+                                    <div className="absolute top-1 right-1 w-5 h-5 bg-emerald-500 text-white rounded-full flex items-center justify-center shadow-xs">
+                                      <Check className="w-3 h-3 stroke-[3]" />
+                                    </div>
+                                  ) : (
+                                    <span className="absolute bottom-0.5 right-1 text-[8px] bg-black/60 text-white px-1 rounded font-bold">
+                                      #{uIdx + 1}
+                                    </span>
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-[10px] text-amber-700 italic bg-amber-50 p-2 rounded-lg border border-amber-200">
+                          নিচের &quot;Product Photographs&quot; সেকশনে ছবি আপলোড করলে এখান থেকেই সরাসরি কালারের ছবি সিলেক্ট করতে পারবেন।
+                        </p>
+                      )}
                     </div>
                   ))}
                 </div>
