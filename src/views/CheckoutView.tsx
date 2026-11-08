@@ -79,7 +79,9 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
   // Calculations
   const subtotal = checkoutItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const totalItemCount = checkoutItems.reduce((sum, item) => sum + item.quantity, 0);
-  const advanceDeliveryFee = selectedZone ? selectedZone.advanceFee : 80;
+  const hasFreeShippingOffer = checkoutItems.some((item) => item.freeShipping);
+  const standardFee = selectedZone ? selectedZone.advanceFee : 80;
+  const advanceDeliveryFee = hasFreeShippingOffer ? 0 : standardFee;
   const totalAmount = Math.max(0, subtotal + advanceDeliveryFee - discountAmount);
 
   // Payable values based on selected payment option:
@@ -692,8 +694,8 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
 
                 <div className="flex justify-between">
                   <span className="font-bold text-black">Standard Delivery Fee</span>
-                  <span className="font-bold text-black font-sans tabular-nums">
-                    ৳{advanceDeliveryFee}
+                  <span className={`font-bold font-sans tabular-nums ${hasFreeShippingOffer ? 'text-emerald-700' : 'text-black'}`}>
+                    {hasFreeShippingOffer ? 'FREE (Bundle Offer)' : `৳${advanceDeliveryFee}`}
                   </span>
                 </div>
 

@@ -89,9 +89,46 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ onNavigateToProduc
   // Bundle Offer Tiers (Screenshot 3 Style)
   const [formBundleHeadline, setFormBundleHeadline] = useState('50% OFF TODAY ONLY');
   const [formTier1Price, setFormTier1Price] = useState<number>(0);
+  const [formTier1FreeShipping, setFormTier1FreeShipping] = useState<boolean>(false);
   const [formTier2Price, setFormTier2Price] = useState<number>(0);
   const [formTier2Badge, setFormTier2Badge] = useState('Most Popular');
+  const [formTier2FreeShipping, setFormTier2FreeShipping] = useState<boolean>(false);
   const [formTier3Price, setFormTier3Price] = useState<number>(0);
+  const [formTier3FreeShipping, setFormTier3FreeShipping] = useState<boolean>(true);
+
+  // Size Options (Optional & Customizable per product)
+  const [formHasSizes, setFormHasSizes] = useState<boolean>(true);
+  const [formCustomSizes, setFormCustomSizes] = useState<string>('38, 40, 42');
+
+  // Color Options (Screenshot 4 Style with image thumbnail)
+  const [formColors, setFormColors] = useState<{ name: string; imageUrl?: string; colorHex?: string }[]>([
+    { name: 'Blue', imageUrl: '', colorHex: '#2563eb' },
+    { name: 'Black', imageUrl: '', colorHex: '#171717' },
+    { name: 'Dark Red', imageUrl: '', colorHex: '#800000' },
+  ]);
+
+  const handleAddColorOption = () => {
+    setFormColors((prev) => [
+      ...prev,
+      {
+        name: `Color ${prev.length + 1}`,
+        imageUrl: formImagesList[0] || '',
+        colorHex: '#800000',
+      },
+    ]);
+  };
+
+  const handleUpdateColor = (index: number, field: 'name' | 'imageUrl' | 'colorHex', value: string) => {
+    setFormColors((prev) => {
+      const copy = [...prev];
+      copy[index] = { ...copy[index], [field]: value };
+      return copy;
+    });
+  };
+
+  const handleRemoveColorOption = (index: number) => {
+    setFormColors((prev) => prev.filter((_, i) => i !== index));
+  };
 
   const refreshList = () => {
     setProducts(store.getProducts());
@@ -157,10 +194,10 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ onNavigateToProduc
     setFormCostPrice(7000);
     setFormStock(10);
     setFormDescription('Luxury in every fold. Specially designed for fancy gatherings and graceful evenings.');
-    setFormFabric('100% Pure Silk with intricate zardozi needlework');
+    setFormFabric('100% Premium Cotton with intricate embroidery');
     setFormFit('Graceful Long Silhouette with Flared Palazzo');
     setFormCare('Specialist Dry Clean Only');
-    setFormOrigin('Dhaka Atelier Studio');
+    setFormOrigin('Tangail Atelier Studio');
     setFormImages('/images/editorial-glory-red.jpg');
     setFormImagesList(['/images/editorial-glory-red.jpg']);
     setFormTransparentImage('');
@@ -169,16 +206,21 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ onNavigateToProduc
     setFormIsBestSeller(false);
     setFormIsFeatured(true);
     setFormIsHangerFeatured(true);
-    setFormVariants([
-      { id: `v-${Date.now()}-38`, name: 'Size 38 / Royal Crimson', size: '38', color: 'Royal Crimson', sku: `HYD-38`, price: 16500, stock: 4 },
-      { id: `v-${Date.now()}-40`, name: 'Size 40 / Royal Crimson', size: '40', color: 'Royal Crimson', sku: `HYD-40`, price: 16500, stock: 4 },
-      { id: `v-${Date.now()}-42`, name: 'Size 42 / Royal Crimson', size: '42', color: 'Royal Crimson', sku: `HYD-42`, price: 16500, stock: 2 },
+    setFormHasSizes(true);
+    setFormCustomSizes('38, 40, 42');
+    setFormColors([
+      { name: 'Blue', imageUrl: '', colorHex: '#2563eb' },
+      { name: 'Black', imageUrl: '', colorHex: '#171717' },
+      { name: 'Dark Red', imageUrl: '', colorHex: '#800000' },
     ]);
     setFormBundleHeadline('50% OFF TODAY ONLY');
     setFormTier1Price(16500);
+    setFormTier1FreeShipping(false);
     setFormTier2Price(29700);
     setFormTier2Badge('Most Popular');
+    setFormTier2FreeShipping(false);
     setFormTier3Price(39600);
+    setFormTier3FreeShipping(true);
     setIsModalOpen(true);
   };
 
@@ -205,15 +247,50 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ onNavigateToProduc
     setFormIsBestSeller(p.isBestSeller ?? false);
     setFormIsFeatured(p.isFeatured ?? true);
     setFormIsHangerFeatured(p.isHangerFeatured ?? true);
-    setFormVariants(p.variants || []);
+    
+    // Load sizes
+    setFormHasSizes(p.hasSizes ?? true);
+    setFormCustomSizes(
+      p.customSizes && p.customSizes.length > 0
+        ? p.customSizes.join(', ')
+        : Array.from(new Set((p.variants || []).map((v) => v.size).filter((s) => s && s !== 'Free Size' && s !== 'Standard'))).join(', ') || '38, 40, 42'
+    );
 
-    // Load bundle tiers
+    // Load colors (Screenshot 4 style)
+    if (p.colorOptions && p.colorOptions.length > 0) {
+      setFormColors(p.colorOptions);
+    } else {
+      const uniqueColors = Array.from(new Set((p.variants || []).map((v) => v.color).filter(Boolean)));
+      if (uniqueColors.length > 0) {
+        setFormColors(
+          uniqueColors.map((c) => {
+            const v = p.variants.find((vr) => vr.color === c);
+            return {
+              name: c,
+              imageUrl: v?.colorImage || p.images[0] || '',
+              colorHex: v?.colorHex || '#800000',
+            };
+          })
+        );
+      } else {
+        setFormColors([
+          { name: 'Blue', imageUrl: p.images[0] || '', colorHex: '#2563eb' },
+          { name: 'Black', imageUrl: p.images[0] || '', colorHex: '#171717' },
+          { name: 'Dark Red', imageUrl: p.images[0] || '', colorHex: '#800000' },
+        ]);
+      }
+    }
+
+    // Load bundle tiers & free shipping
     setFormBundleHeadline(p.bundleHeadline || '50% OFF TODAY ONLY');
     const tiers = p.bundleTiers || [];
     setFormTier1Price(tiers[0]?.price ?? p.price);
+    setFormTier1FreeShipping(tiers[0]?.freeShipping ?? false);
     setFormTier2Price(tiers[1]?.price ?? Math.round(p.price * 2 * 0.9));
     setFormTier2Badge(tiers[1]?.badge || 'Most Popular');
+    setFormTier2FreeShipping(tiers[1]?.freeShipping ?? false);
     setFormTier3Price(tiers[2]?.price ?? Math.round(p.price * 3 * 0.8));
+    setFormTier3FreeShipping(tiers[2]?.freeShipping ?? true);
 
     setIsModalOpen(true);
   };
@@ -238,23 +315,53 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ onNavigateToProduc
       {
         quantity: 1,
         label: 'Buy 1',
-        subtitle: 'Standard price',
+        subtitle: formTier1FreeShipping ? 'Standard Edition + Free Delivery' : 'Standard Edition',
         price: Number(formTier1Price || formPrice),
+        freeShipping: formTier1FreeShipping,
       },
       {
         quantity: 2,
         label: 'Buy 2',
-        subtitle: 'Save 10%',
+        subtitle: formTier2FreeShipping ? 'Save 10% Extra + Free Delivery' : 'Save 10% Extra',
         badge: formTier2Badge || undefined,
         price: Number(formTier2Price || Math.round(formPrice * 2 * 0.9)),
+        freeShipping: formTier2FreeShipping,
       },
       {
         quantity: 3,
         label: 'Buy 3',
-        subtitle: 'Save 20%',
+        subtitle: formTier3FreeShipping ? 'Save 20% Extra + Free Delivery' : 'Save 20% Extra',
         price: Number(formTier3Price || Math.round(formPrice * 3 * 0.8)),
+        freeShipping: formTier3FreeShipping,
       },
     ];
+
+    const parsedSizes = formHasSizes
+      ? formCustomSizes.split(',').map((s) => s.trim()).filter(Boolean)
+      : ['Free Size'];
+
+    const colorsToUse = formColors.length > 0
+      ? formColors
+      : [{ name: 'Default', imageUrl: imagesArray[0], colorHex: '#800000' }];
+
+    // Auto-generate synchronized variants with accurate price, compareAtPrice, size and color image
+    const generatedVariants: ProductVariant[] = [];
+    colorsToUse.forEach((col) => {
+      parsedSizes.forEach((sz) => {
+        generatedVariants.push({
+          id: `v-${Date.now()}-${col.name}-${sz}`.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase(),
+          name: formHasSizes ? `Size ${sz} / ${col.name}` : col.name,
+          size: formHasSizes ? sz : 'Free Size',
+          color: col.name,
+          colorHex: col.colorHex,
+          colorImage: col.imageUrl || imagesArray[0],
+          sku: `${formSku}-${sz}-${col.name}`.replace(/[^a-zA-Z0-9]/g, '-').toUpperCase(),
+          price: Number(formPrice),
+          compareAtPrice: formCompareAt ? Number(formCompareAt) : undefined,
+          stock: Math.max(1, Math.floor(formStock / (colorsToUse.length * parsedSizes.length)) || 4),
+        });
+      });
+    });
 
     store.saveProduct({
       id: editingProduct?.id,
@@ -268,6 +375,9 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ onNavigateToProduc
       costPrice: formCostPrice ? Number(formCostPrice) : undefined,
       stock: Number(formStock),
       description: formDescription,
+      hasSizes: formHasSizes,
+      customSizes: formHasSizes ? parsedSizes : [],
+      colorOptions: colorsToUse,
       specifications: {
         fabric: formFabric,
         fit: formFit,
@@ -281,7 +391,7 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ onNavigateToProduc
       isBestSeller: formIsBestSeller,
       isFeatured: formIsFeatured,
       isHangerFeatured: formIsHangerFeatured,
-      variants: formVariants,
+      variants: generatedVariants,
       bundleHeadline: formBundleHeadline,
       bundleTiers,
     });
@@ -493,9 +603,7 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ onNavigateToProduc
       {isModalOpen && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-xs animate-in fade-in duration-200"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setIsModalOpen(false);
-          }}
+          /* Intentionally DO NOT close on outer backdrop click to prevent accidental loss of typed product data */
         >
           <div className="bg-white rounded-2xl sm:rounded-3xl max-w-3xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-neutral-200 overflow-hidden relative">
             {/* Sticky Header with prominent close button */}
@@ -633,10 +741,11 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ onNavigateToProduc
                 </div>
 
                 <div>
-                  <label className="block font-semibold text-neutral-800 mb-1">Compare-At Price (Optional)</label>
+                  <label className="block font-semibold text-neutral-800 mb-1">Compare-At Regular Price (Optional)</label>
                   <input
                     type="number"
                     value={formCompareAt || ''}
+                    placeholder="e.g. 19500 (Shows strikethrough & Save % badge)"
                     onChange={(e) => setFormCompareAt(e.target.value ? Number(e.target.value) : undefined)}
                     className="w-full p-3 border border-neutral-200 rounded-xl focus:border-[#800000] focus:outline-hidden"
                   />
@@ -650,6 +759,167 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ onNavigateToProduc
                     onChange={(e) => setFormCostPrice(e.target.value ? Number(e.target.value) : undefined)}
                     className="w-full p-3 border border-neutral-200 rounded-xl focus:border-[#800000] focus:outline-hidden"
                   />
+                </div>
+              </div>
+
+              {/* Size Options (Customizable & Optional for Sarees/Unstitched) */}
+              <div className="p-4 bg-neutral-50 rounded-2xl border border-neutral-200 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <span className="font-semibold text-neutral-900 text-xs">Size Selection (সাইজ অপশন)</span>
+                  </div>
+                  <label className="flex items-center space-x-2 cursor-pointer bg-white px-3 py-1.5 rounded-xl border border-neutral-200 shadow-xs">
+                    <input
+                      type="checkbox"
+                      checked={formHasSizes}
+                      onChange={(e) => setFormHasSizes(e.target.checked)}
+                      className="rounded-xs text-[#800000] cursor-pointer"
+                    />
+                    <span className="font-bold text-[11px] text-neutral-800">
+                      {formHasSizes ? 'Sizes Enabled (সাইজ দেখাবে)' : 'No Sizes (শাড়ি/আনস্টিচড - সাইজ দেখাবে না)'}
+                    </span>
+                  </label>
+                </div>
+
+                {formHasSizes ? (
+                  <div className="space-y-2">
+                    <label className="block text-[11px] text-neutral-600">
+                      Custom Sizes (কমা দিয়ে একাধিক সাইজ লিখুন, যেমন: 38, 40, 42 অথবা S, M, L, XL):
+                    </label>
+                    <input
+                      type="text"
+                      value={formCustomSizes}
+                      onChange={(e) => setFormCustomSizes(e.target.value)}
+                      placeholder="e.g. 38, 40, 42 or S, M, L, XL or Free Size"
+                      className="w-full p-2.5 bg-white border border-neutral-200 rounded-xl focus:border-[#800000] focus:outline-hidden font-medium text-xs"
+                    />
+                    <div className="flex items-center gap-2 pt-0.5">
+                      <span className="text-[10px] text-neutral-400 font-semibold">Quick Presets:</span>
+                      <button
+                        type="button"
+                        onClick={() => setFormCustomSizes('38, 40, 42')}
+                        className="px-2 py-0.5 bg-neutral-200 hover:bg-neutral-300 rounded text-[10px] font-semibold text-neutral-700"
+                      >
+                        38, 40, 42
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFormCustomSizes('36, 38, 40, 42, 44')}
+                        className="px-2 py-0.5 bg-neutral-200 hover:bg-neutral-300 rounded text-[10px] font-semibold text-neutral-700"
+                      >
+                        36, 38, 40, 42, 44
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFormCustomSizes('S, M, L, XL, XXL')}
+                        className="px-2 py-0.5 bg-neutral-200 hover:bg-neutral-300 rounded text-[10px] font-semibold text-neutral-700"
+                      >
+                        S, M, L, XL, XXL
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFormCustomSizes('Free Size')}
+                        className="px-2 py-0.5 bg-neutral-200 hover:bg-neutral-300 rounded text-[10px] font-semibold text-neutral-700"
+                      >
+                        Free Size
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-neutral-500 italic bg-white p-2.5 rounded-xl border border-neutral-100">
+                    সাইজ বন্ধ রাখা হয়েছে। কাস্টমার সরাসরি পণ্যটি সিলেক্ট করে অর্ডার করতে পারবেন।
+                  </p>
+                )}
+              </div>
+
+              {/* Color Options & Photo Swatches (Screenshot 4 Style) */}
+              <div className="p-4 bg-neutral-50 rounded-2xl border border-neutral-200 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <span className="font-semibold text-neutral-900 text-xs">Color Options & Model Swatches (Screenshot 4 Style)</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleAddColorOption}
+                    className="px-3 py-1 bg-[#800000] text-white text-[11px] font-bold rounded-lg cursor-pointer hover:bg-[#600000]"
+                  >
+                    + Add Color
+                  </button>
+                </div>
+                <p className="text-[11px] text-neutral-500">
+                  প্রত্যেকটি কালারের নাম এবং মডেল ছবির URL দিন। স্টোরফ্রন্টে সুন্দর স্কয়ার কার্ড এবং গ্রিন টিকমার্ক সহ প্রদর্শিত হবে।
+                </p>
+
+                <div className="space-y-2.5">
+                  {formColors.map((col, cIdx) => (
+                    <div
+                      key={cIdx}
+                      className="bg-white p-3 rounded-xl border border-neutral-200 flex flex-col sm:flex-row items-center gap-3"
+                    >
+                      {/* Image Thumbnail Preview */}
+                      <div className="w-12 h-12 rounded-lg border border-neutral-300 overflow-hidden bg-neutral-100 shrink-0 relative">
+                        {col.imageUrl ? (
+                          <img src={col.imageUrl} alt={col.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <div
+                            className="w-full h-full flex items-center justify-center font-bold text-[9px] text-white"
+                            style={{ backgroundColor: col.colorHex || '#800000' }}
+                          >
+                            {col.name.slice(0, 3)}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Color Name */}
+                      <div className="flex-1 w-full sm:w-auto">
+                        <label className="block text-[10px] text-neutral-500 font-semibold mb-0.5">Color Name</label>
+                        <input
+                          type="text"
+                          value={col.name}
+                          onChange={(e) => handleUpdateColor(cIdx, 'name', e.target.value)}
+                          placeholder="e.g. Blue, Black, Dark Red"
+                          className="w-full p-2 border border-neutral-200 rounded-lg text-xs font-semibold"
+                        />
+                      </div>
+
+                      {/* Color Thumbnail Image URL */}
+                      <div className="flex-1 w-full sm:w-auto">
+                        <label className="block text-[10px] text-neutral-500 font-semibold mb-0.5">Model / Swatch Image URL</label>
+                        <input
+                          type="text"
+                          value={col.imageUrl || ''}
+                          onChange={(e) => handleUpdateColor(cIdx, 'imageUrl', e.target.value)}
+                          placeholder="https://... or select photo"
+                          className="w-full p-2 border border-neutral-200 rounded-lg text-xs font-mono text-[11px]"
+                        />
+                      </div>
+
+                      {/* Color Hex */}
+                      <div className="w-20 shrink-0">
+                        <label className="block text-[10px] text-neutral-500 font-semibold mb-0.5">Tone</label>
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            type="color"
+                            value={col.colorHex || '#800000'}
+                            onChange={(e) => handleUpdateColor(cIdx, 'colorHex', e.target.value)}
+                            className="w-7 h-7 rounded border border-neutral-300 cursor-pointer p-0"
+                          />
+                          <span className="text-[10px] font-mono text-neutral-500 truncate">{col.colorHex}</span>
+                        </div>
+                      </div>
+
+                      {/* Delete */}
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveColorOption(cIdx)}
+                        disabled={formColors.length <= 1}
+                        className="p-2 text-neutral-400 hover:text-red-600 disabled:opacity-20 cursor-pointer"
+                        title="Remove Color"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
                 </div>
               </div>
 
@@ -677,7 +947,8 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ onNavigateToProduc
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div className="bg-white p-3 rounded-xl border border-neutral-200 space-y-1.5">
+                  {/* Tier 1: Buy 1 */}
+                  <div className="bg-white p-3 rounded-xl border border-neutral-200 space-y-2">
                     <span className="font-bold text-neutral-900 block text-xs">Buy 1 (Standard)</span>
                     <label className="block text-[10px] text-neutral-500">Package Total (৳ BDT)</label>
                     <input
@@ -686,9 +957,19 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ onNavigateToProduc
                       onChange={(e) => setFormTier1Price(Number(e.target.value))}
                       className="w-full p-2 border border-neutral-200 rounded-lg text-xs font-bold"
                     />
+                    <label className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700 cursor-pointer pt-1">
+                      <input
+                        type="checkbox"
+                        checked={formTier1FreeShipping}
+                        onChange={(e) => setFormTier1FreeShipping(e.target.checked)}
+                        className="rounded-xs text-emerald-600"
+                      />
+                      <span>Free Delivery (ফ্রি ডেলিভারি)</span>
+                    </label>
                   </div>
 
-                  <div className="bg-white p-3 rounded-xl border border-neutral-200 space-y-1.5">
+                  {/* Tier 2: Buy 2 */}
+                  <div className="bg-white p-3 rounded-xl border border-neutral-200 space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="font-bold text-neutral-900 text-xs">Buy 2 (Bundle)</span>
                       <span className="text-[9px] bg-neutral-900 text-white px-1.5 py-0.5 rounded-full font-bold">Badge</span>
@@ -707,9 +988,19 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ onNavigateToProduc
                       placeholder="Badge (e.g. Most Popular)"
                       className="w-full p-1.5 border border-neutral-200 rounded-lg text-[10px]"
                     />
+                    <label className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700 cursor-pointer pt-1">
+                      <input
+                        type="checkbox"
+                        checked={formTier2FreeShipping}
+                        onChange={(e) => setFormTier2FreeShipping(e.target.checked)}
+                        className="rounded-xs text-emerald-600"
+                      />
+                      <span>Free Delivery (ফ্রি ডেলিভারি)</span>
+                    </label>
                   </div>
 
-                  <div className="bg-white p-3 rounded-xl border border-neutral-200 space-y-1.5">
+                  {/* Tier 3: Buy 3 */}
+                  <div className="bg-white p-3 rounded-xl border border-neutral-200 space-y-2">
                     <span className="font-bold text-neutral-900 block text-xs">Buy 3 (Mega Save)</span>
                     <label className="block text-[10px] text-neutral-500">Package Total (৳ BDT)</label>
                     <input
@@ -718,17 +1009,29 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ onNavigateToProduc
                       onChange={(e) => setFormTier3Price(Number(e.target.value))}
                       className="w-full p-2 border border-neutral-200 rounded-lg text-xs font-bold"
                     />
+                    <label className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700 cursor-pointer pt-1">
+                      <input
+                        type="checkbox"
+                        checked={formTier3FreeShipping}
+                        onChange={(e) => setFormTier3FreeShipping(e.target.checked)}
+                        className="rounded-xs text-emerald-600"
+                      />
+                      <span>Free Delivery (ফ্রি ডেলিভারি)</span>
+                    </label>
                   </div>
                 </div>
               </div>
 
               <div>
-                <label className="block font-semibold text-neutral-800 mb-1">Description</label>
+                <label className="block font-semibold text-neutral-800 mb-1">
+                  Product Description (Line breaks, spaces, and paragraphs will appear exactly as typed)
+                </label>
                 <textarea
-                  rows={3}
+                  rows={6}
                   value={formDescription}
                   onChange={(e) => setFormDescription(e.target.value)}
-                  className="w-full p-3 border border-neutral-200 rounded-xl focus:border-[#800000] focus:outline-hidden"
+                  placeholder="Enter detailed description. Enter lines, bullet points, and paragraphs freely..."
+                  className="w-full p-3 border border-neutral-200 rounded-xl focus:border-[#800000] focus:outline-hidden whitespace-pre-wrap font-sans text-xs leading-relaxed"
                 />
               </div>
 

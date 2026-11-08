@@ -58,13 +58,18 @@ export const Header: React.FC<HeaderProps> = ({
               <Menu className="w-6 h-6 stroke-[1.8]" />
             </button>
 
-            {/* Center: Serif Brand Wordmark */}
+            {/* Center: Official HYDEE Brand Logo */}
             <button
               type="button"
               onClick={() => onNavigate('/')}
-              className="font-serif text-2xl sm:text-3xl font-bold tracking-[0.22em] text-[#800000] hover:opacity-90 transition-opacity cursor-pointer text-center"
+              className="flex items-center justify-center hover:opacity-90 transition-opacity cursor-pointer py-0.5"
+              title="HYDEE"
             >
-              HYDEE
+              <img
+                src="/assets/aistudio/hydee_wordmark_transparent.png"
+                alt="HYDEE Women Collection"
+                className="h-10 sm:h-12 md:h-14 w-auto object-contain drop-shadow-xs"
+              />
             </button>
 
             {/* Right: Cart Bag Icon with Black Badge */}
@@ -97,10 +102,12 @@ export const Header: React.FC<HeaderProps> = ({
           {/* Drawer Body */}
           <div className="relative w-full max-w-xs bg-white h-full shadow-2xl flex flex-col z-10 animate-in slide-in-from-left duration-300">
             {/* Drawer Header */}
-            <div className="p-5 border-b border-neutral-100 flex items-center justify-between">
-              <span className="font-serif text-2xl font-bold tracking-[0.2em] text-[#800000]">
-                HYDEE
-              </span>
+            <div className="p-4 border-b border-neutral-100 flex items-center justify-between">
+              <img
+                src="/assets/aistudio/hydee_wordmark_transparent.png"
+                alt="HYDEE Women Collection"
+                className="h-9 w-auto object-contain"
+              />
               <button
                 type="button"
                 onClick={() => setMobileMenuOpen(false)}

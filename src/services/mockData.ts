@@ -78,7 +78,6 @@ export const GLORY_RED_PRODUCT: Product = {
       { id: 'v-glory-40', name: 'Size 40 (M) / Glory Crimson', size: '40', color: 'Glory Crimson', colorHex: '#800000', sku: 'HYD-GLORY-40', price: 16500, compareAtPrice: 19500, stock: 3 },
       { id: 'v-glory-42', name: 'Size 42 (L) / Glory Crimson', size: '42', color: 'Glory Crimson', colorHex: '#800000', sku: 'HYD-GLORY-42', price: 16500, compareAtPrice: 19500, stock: 2 },
     ],
-    bundleHeadline: 'ATELIER EXCLUSIVE EDIT',
     bundleTiers: [
       { quantity: 1, label: 'Buy 1', subtitle: 'Standard Atelier Ensemble', price: 16500 },
       { quantity: 2, label: 'Buy 2', subtitle: 'Save 10% Extra', price: 29700, badge: 'Most Popular' },

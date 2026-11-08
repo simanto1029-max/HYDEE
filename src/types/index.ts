@@ -1,9 +1,10 @@
 export interface ProductVariant {
   id: string;
   name: string; // e.g. "Size 40 / Maroon"
-  size: string; // e.g. "38", "40", "42", "44", "S", "M", "L", "XL"
-  color: string; // e.g. "Maroon", "Pearl White", "Obsidian Black"
+  size: string; // e.g. "38", "40", "42", "44", "S", "M", "L", "XL", "Free Size"
+  color: string; // e.g. "Blue", "Black", "Dark Red"
   colorHex?: string;
+  colorImage?: string; // Image swatch thumbnail for color
   sku: string;
   price: number;
   compareAtPrice?: number;
@@ -13,9 +14,16 @@ export interface ProductVariant {
 export interface BundleTier {
   quantity: number; // e.g. 1, 2, 3
   label: string; // e.g. "Buy 1", "Buy 2", "Buy 3"
-  subtitle?: string; // e.g. "Standard price", "Save 10%", "Save 20%"
+  subtitle?: string; // e.g. "Standard Edition", "Save 10% Extra", "Free Delivery"
   price?: number; // custom package price in BDT
   badge?: string; // e.g. "Most Popular"
+  freeShipping?: boolean; // If true, free delivery is provided for this tier
+}
+
+export interface ProductColorOption {
+  name: string;
+  imageUrl?: string;
+  colorHex?: string;
 }
 
 export interface Product360Frame {
@@ -37,6 +45,9 @@ export interface Product {
   stock: number;
   description: string;
   shortDescription?: string;
+  hasSizes?: boolean; // Whether size options are enabled (false for saree, free-size, etc.)
+  customSizes?: string[]; // Admin customized size choices
+  colorOptions?: ProductColorOption[]; // Screenshot 4 style color swatches with thumbnail
   specifications: {
     fabric: string;
     fit: string;
@@ -90,6 +101,7 @@ export interface CartItem {
   price: number;
   quantity: number;
   maxStock: number;
+  freeShipping?: boolean;
 }
 
 export type OrderStatus =

@@ -76,20 +76,27 @@ export default function App() {
     });
   };
 
-  const handleBuyNow = (product: Product, variantId?: string, quantity: number = 1, customUnitPrice?: number) => {
+  const handleBuyNow = (
+    product: Product,
+    variantId?: string,
+    quantity: number = 1,
+    customUnitPrice?: number,
+    isFreeShipping?: boolean
+  ) => {
     const selectedVariant = product.variants.find((v) => v.id === variantId) || product.variants[0];
-    const price = customUnitPrice !== undefined ? customUnitPrice : (selectedVariant.price || product.price);
+    const price = customUnitPrice !== undefined ? customUnitPrice : (selectedVariant?.price || product.price);
     const buyItem: CartItem = {
       productId: product.id,
-      variantId: selectedVariant.id,
+      variantId: selectedVariant?.id || `v-${product.id}`,
       name: product.name,
       slug: product.slug,
       imageUrl: product.images[0],
-      size: selectedVariant.size,
-      color: selectedVariant.color,
+      size: selectedVariant?.size || 'Free Size',
+      color: selectedVariant?.color || 'Default',
       price,
       quantity,
-      maxStock: selectedVariant.stock || product.stock,
+      maxStock: selectedVariant?.stock || product.stock,
+      freeShipping: isFreeShipping,
     };
     setDirectBuyItem(buyItem);
     navigate('/checkout');

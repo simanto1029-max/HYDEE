@@ -40,10 +40,12 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
           {/* LEFT COLUMN: Brand Identity & Legal Charters (lg:col-span-4) */}
           <div className="lg:col-span-4 space-y-4">
             <div>
-              <span className="font-serif tracking-[0.25em] text-2xl font-bold text-[#800000] block">
-                HYDEE
-              </span>
-              <p className="text-xs text-neutral-500 font-medium mt-1 max-w-sm leading-relaxed">
+              <img
+                src="/assets/aistudio/hydee_wordmark_transparent.png"
+                alt="HYDEE Women Collection"
+                className="h-10 w-auto object-contain mb-1"
+              />
+              <p className="text-xs text-neutral-500 font-medium max-w-sm leading-relaxed">
                 Bespoke luxury for every occasion, crafted in Bangladesh.
               </p>
             </div>

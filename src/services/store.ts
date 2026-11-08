@@ -251,36 +251,64 @@ class StoreService {
         .eq('is_archived', false);
 
       if (!prodError && prodData && prodData.length > 0) {
-        this.products = prodData.map((p: any) => ({
-          id: p.id,
-          name: p.name,
-          slug: p.slug,
-          sku: p.sku,
-          categorySlug: p.category_slug,
-          categoryName: p.category_name,
-          price: Number(p.price),
-          compareAtPrice: p.compare_at_price ? Number(p.compare_at_price) : undefined,
-          costPrice: p.cost_price ? Number(p.cost_price) : undefined,
-          stock: p.stock ?? 10,
-          description: p.description || '',
-          shortDescription: p.short_description || '',
-          specifications: {
-            fabric: p.fabric || '',
-            fit: p.fit || '',
-            care: p.care || '',
-            origin: p.origin || '',
-            craftsmanshipNotes: p.craftsmanship_notes || '',
-          },
-          images: Array.isArray(p.images) && p.images.length > 0 ? p.images : ['/images/editorial-glory-red.jpg'],
-          variants: Array.isArray(p.variants) && p.variants.length > 0 ? p.variants : [],
-          tags: Array.isArray(p.tags) ? p.tags : [],
-          isBestSeller: Boolean(p.is_best_seller),
-          isFeatured: Boolean(p.is_featured),
-          isHangerFeatured: Boolean(p.is_hanger_featured),
-          isArchived: Boolean(p.is_archived),
-          createdAt: p.created_at || new Date().toISOString(),
-          updatedAt: p.updated_at || new Date().toISOString(),
-        }));
+        this.products = prodData.map((p: any) => {
+          const variantsList = Array.isArray(p.variants) && p.variants.length > 0 ? p.variants : [];
+          const realSizes = Array.from(
+            new Set(variantsList.map((v: any) => v.size).filter((s: any) => s && s !== 'Free Size' && s !== 'Standard'))
+          );
+          const hasSizes = p.has_sizes !== undefined ? Boolean(p.has_sizes) : (realSizes.length > 0);
+
+          let colors = p.color_options;
+          if (!colors || !Array.isArray(colors) || colors.length === 0) {
+            const uniqueColNames = Array.from(new Set(variantsList.map((v: any) => v.color).filter(Boolean)));
+            if (uniqueColNames.length > 0) {
+              colors = uniqueColNames.map((cName: any) => {
+                const match = variantsList.find((v: any) => v.color === cName);
+                return {
+                  name: String(cName),
+                  imageUrl: match?.colorImage || p.images?.[0] || '',
+                  colorHex: match?.colorHex || '#800000',
+                };
+              });
+            }
+          }
+
+          return {
+            id: p.id,
+            name: p.name,
+            slug: p.slug,
+            sku: p.sku,
+            categorySlug: p.category_slug,
+            categoryName: p.category_name,
+            price: Number(p.price),
+            compareAtPrice: p.compare_at_price ? Number(p.compare_at_price) : undefined,
+            costPrice: p.cost_price ? Number(p.cost_price) : undefined,
+            stock: p.stock ?? 10,
+            description: p.description || '',
+            shortDescription: p.short_description || '',
+            specifications: {
+              fabric: p.fabric || '',
+              fit: p.fit || '',
+              care: p.care || '',
+              origin: p.origin || '',
+              craftsmanshipNotes: p.craftsmanship_notes || '',
+            },
+            images: Array.isArray(p.images) && p.images.length > 0 ? p.images : ['/images/editorial-glory-red.jpg'],
+            variants: variantsList,
+            hasSizes,
+            customSizes: p.custom_sizes || (hasSizes ? realSizes : []),
+            colorOptions: colors,
+            bundleTiers: p.bundle_tiers || undefined,
+            bundleHeadline: p.bundle_headline || undefined,
+            tags: Array.isArray(p.tags) ? p.tags : [],
+            isBestSeller: Boolean(p.is_best_seller),
+            isFeatured: Boolean(p.is_featured),
+            isHangerFeatured: Boolean(p.is_hanger_featured),
+            isArchived: Boolean(p.is_archived),
+            createdAt: p.created_at || new Date().toISOString(),
+            updatedAt: p.updated_at || new Date().toISOString(),
+          };
+        });
       }
 
       // 3. Fetch Orders

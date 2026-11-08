@@ -100,13 +100,17 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
       <div className="min-h-screen bg-neutral-950 flex items-center justify-center p-6">
         <div className="max-w-md w-full bg-white rounded-3xl p-8 sm:p-10 shadow-2xl space-y-6">
           <div className="text-center space-y-2">
-            <div className="w-12 h-12 rounded-2xl bg-[#800000] text-white flex items-center justify-center mx-auto shadow-md">
-              <Lock className="w-6 h-6" />
-            </div>
-            <span className="font-serif text-2xl font-bold tracking-[0.2em] text-neutral-950 block">
-              HYDEE
-            </span>
-            <p className="text-xs text-neutral-500 uppercase tracking-widest font-semibold">
+            <img
+              src="/assets/aistudio/hydee_logo_5113452b.png"
+              alt="HYDEE"
+              className="w-14 h-14 rounded-2xl mx-auto shadow-md object-cover"
+            />
+            <img
+              src="/assets/aistudio/hydee_wordmark_transparent.png"
+              alt="HYDEE Women Collection"
+              className="h-9 w-auto mx-auto object-contain mt-2"
+            />
+            <p className="text-xs text-neutral-500 uppercase tracking-widest font-semibold pt-1">
               Atelier Management Portal
             </p>
           </div>
@@ -185,7 +189,12 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
       {/* Top Admin Bar */}
       <header className="bg-neutral-950 text-white h-16 px-6 sm:px-10 flex items-center justify-between border-b border-neutral-800 sticky top-0 z-40">
         <div className="flex items-center space-x-3">
-          <span className="font-serif text-xl font-bold tracking-widest">HYDEE</span>
+          <img
+            src="/assets/aistudio/hydee_logo_5113452b.png"
+            alt="HYDEE"
+            className="w-8 h-8 rounded-lg object-cover border border-neutral-700 shadow-xs"
+          />
+          <span className="font-serif text-xl font-bold tracking-widest text-white">HYDEE</span>
           <span className="text-[10px] bg-[#800000] text-white px-2 py-0.5 rounded-sm font-semibold uppercase">
             Admin Atelier
           </span>

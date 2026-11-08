@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowRight, ShoppingBag } from 'lucide-react';
+import { ArrowRight, Check, MessageCircle, ShoppingBag } from 'lucide-react';
 import { ProductCard } from '../components/ProductCard';
 import { store } from '../services/store';
 import { metaPixel } from '../services/metaPixel';
@@ -9,7 +9,7 @@ interface ProductDetailViewProps {
   slug: string;
   onNavigate: (path: string) => void;
   onAddToCart: (product: Product, variantId?: string, quantity?: number, customUnitPrice?: number) => void;
-  onBuyNow: (product: Product, variantId?: string, quantity?: number, customUnitPrice?: number) => void;
+  onBuyNow: (product: Product, variantId?: string, quantity?: number, customUnitPrice?: number, isFreeShipping?: boolean) => void;
 }
 
 export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
@@ -135,7 +135,16 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
   };
 
   const handleBuyNowClick = () => {
-    onBuyNow(product, selectedVariant?.id, tierQuantity, effectiveUnitPrice);
+    onBuyNow(product, selectedVariant?.id, tierQuantity, effectiveUnitPrice, currentTier.freeShipping);
+  };
+
+  const handleWhatsAppOrder = () => {
+    const sizeText = product.hasSizes !== false && selectedVariant?.size && selectedVariant.size !== 'Free Size' ? `\n• Size: ${selectedVariant.size}` : '';
+    const colorText = selectedVariant?.color ? `\n• Color: ${selectedVariant.color}` : '';
+    const freeShipText = currentTier.freeShipping ? ' (Free Delivery 🎉)' : '';
+    const message = `Hello HYDEE! I would like to place an order for:\n\n✨ Product: ${product.name}${sizeText}${colorText}\n📦 Quantity: ${tierQuantity} item(s) (${currentTier.label})\n💰 Total Price: ৳${tierTotalPrice.toLocaleString()}${freeShipText}\n\nProduct Link: ${window.location.origin}/products/${product.slug}`;
+    const url = `https://wa.me/8801977771029?text=${encodeURIComponent(message)}`;
+    window.open(url, '_blank');
   };
 
   return (
@@ -208,76 +217,138 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
               </div>
             </div>
 
-            {/* Variant Selector: Sizes (Without "Select Size" text as requested) */}
-            {product.variants.length > 0 && (
-              <div className="space-y-3 pt-1">
-                {/* Size buttons without "Select Size" label */}
-                <div className="grid grid-cols-4 gap-2">
-                  {product.variants.map((v) => {
-                    const isSelected = v.id === selectedVariantId;
-                    return (
-                      <button
-                        key={v.id}
-                        onClick={() => setSelectedVariantId(v.id)}
-                        disabled={v.stock <= 0}
-                        className={`py-2 text-xs font-bold rounded-lg border transition-all cursor-pointer ${
-                          isSelected
-                            ? 'border-neutral-950 bg-neutral-950 text-white shadow-xs'
-                            : v.stock <= 0
-                            ? 'border-neutral-200 bg-neutral-100 text-neutral-400 line-through cursor-not-allowed'
-                            : 'border-neutral-200 bg-white text-neutral-800 hover:border-neutral-400'
-                        }`}
-                      >
-                        {v.size}
-                      </button>
-                    );
-                  })}
-                </div>
+            {/* Color Options & Model Swatches (Right Under Price Section) */}
+            {(() => {
+              const colorList: { name: string; imageUrl?: string; colorHex?: string }[] =
+                product.colorOptions && product.colorOptions.length > 0
+                  ? product.colorOptions
+                  : availableColors.map((c) => {
+                      const v = product.variants.find((vr) => vr.color === c.color);
+                      return {
+                        name: c.color,
+                        imageUrl: v?.colorImage || product.images[0],
+                        colorHex: c.colorHex,
+                      };
+                    });
 
-                {/* Interactive Color Circle Swatches (Customer can click to select color) */}
-                {availableColors.length > 0 && (
-                  <div className="space-y-1.5 pt-1">
-                    <div className="flex items-center space-x-2 text-xs">
-                      <span className="text-neutral-500 font-medium">Color:</span>
-                      <span className="font-bold text-neutral-900">{selectedVariant?.color || availableColors[0].color}</span>
-                    </div>
-                    <div className="flex items-center gap-2.5">
-                      {availableColors.map((c) => {
-                        const isColSelected = selectedVariant?.color === c.color;
+              if (colorList.length === 0) return null;
+
+              const currentColorName = selectedVariant?.color || colorList[0]?.name;
+
+              return (
+                <div className="space-y-2 pt-1">
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="text-neutral-500 font-medium">Color:</span>
+                    <span className="font-bold text-neutral-900">{currentColorName}</span>
+                  </div>
+
+                  <div className="flex items-center gap-3.5 overflow-x-auto no-scrollbar py-1">
+                    {colorList.map((col) => {
+                      const isSelected = currentColorName === col.name;
+                      const thumbnail = col.imageUrl || product.images[0];
+
+                      return (
+                        <button
+                          key={col.name}
+                          type="button"
+                          onClick={() => {
+                            const matched = product.variants.find((v) => v.color === col.name);
+                            if (matched) setSelectedVariantId(matched.id);
+
+                            // Sync main gallery photo if image matches
+                            const imgIdx = product.images.findIndex((img) => img === col.imageUrl);
+                            if (imgIdx >= 0) setSelectedImageIndex(imgIdx);
+                          }}
+                          className="flex flex-col items-center group cursor-pointer shrink-0 focus:outline-hidden"
+                        >
+                          <div
+                            className={`w-16 h-16 sm:w-20 sm:h-20 rounded-2xl p-0.5 relative transition-all ${
+                              isSelected
+                                ? 'border-2 border-emerald-500 ring-2 ring-emerald-400/40 shadow-md'
+                                : 'border-2 border-neutral-200/90 hover:border-neutral-400 shadow-xs'
+                            }`}
+                          >
+                            <div className="w-full h-full rounded-xl overflow-hidden bg-neutral-100 relative">
+                              {thumbnail ? (
+                                <img
+                                  src={thumbnail}
+                                  alt={col.name}
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                <div
+                                  className="w-full h-full flex items-center justify-center font-bold text-xs text-white"
+                                  style={{ backgroundColor: col.colorHex || '#800000' }}
+                                >
+                                  {col.name.slice(0, 3)}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Screenshot 4 Exact Match: Round green badge with white checkmark in top-right */}
+                            {isSelected && (
+                              <div className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-emerald-500 rounded-full flex items-center justify-center text-white shadow-sm ring-2 ring-white">
+                                <Check className="w-3.5 h-3.5 stroke-[3]" />
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Color name label below card */}
+                          <span
+                            className={`text-xs sm:text-sm mt-1.5 font-medium transition-colors ${
+                              isSelected ? 'text-slate-900 font-bold' : 'text-slate-600 group-hover:text-slate-900'
+                            }`}
+                          >
+                            {col.name}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Variant Selector: Sizes (Directly Under Color, hidden for Sarees/Unstitched) */}
+            {product.hasSizes !== false && (
+              (() => {
+                const displaySizes = (product.customSizes && product.customSizes.length > 0)
+                  ? product.customSizes
+                  : Array.from(new Set(product.variants.map((v) => v.size).filter((s) => s && s !== 'Free Size' && s !== 'Standard')));
+                if (displaySizes.length === 0) return null;
+                return (
+                  <div className="space-y-2 pt-1">
+                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                      {displaySizes.map((sz) => {
+                        const isSelected = selectedVariant?.size === sz;
                         return (
                           <button
-                            key={c.color}
+                            key={sz}
                             type="button"
                             onClick={() => {
-                              const matched = product.variants.find((v) => v.color === c.color);
+                              const matched = product.variants.find((v) => v.size === sz && (!selectedVariant?.color || v.color === selectedVariant.color)) || product.variants.find((v) => v.size === sz);
                               if (matched) setSelectedVariantId(matched.id);
                             }}
-                            className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 transition-all p-0.5 cursor-pointer flex items-center justify-center ${
-                              isColSelected
-                                ? 'border-[#800000] ring-2 ring-[#800000]/30 scale-110 shadow-xs'
-                                : 'border-neutral-300 hover:border-neutral-700'
+                            className={`py-2 text-xs font-bold rounded-lg border transition-all cursor-pointer ${
+                              isSelected
+                                ? 'border-neutral-950 bg-neutral-950 text-white shadow-xs'
+                                : 'border-neutral-200 bg-white text-neutral-800 hover:border-neutral-400'
                             }`}
-                            title={c.color}
-                            aria-label={c.color}
                           >
-                            <span
-                              className="w-full h-full rounded-full border border-black/10 inline-block"
-                              style={{ backgroundColor: c.colorHex || '#800000' }}
-                            />
+                            {sz}
                           </button>
                         );
                       })}
                     </div>
                   </div>
-                )}
-              </div>
+                );
+              })()
             )}
 
             {/* ========================================================
-                QUANTITY BUNDLE OFFERS (Most Popular selected by default, Maroon Border, All Black Text)
+                QUANTITY BUNDLE OFFERS (Screenshot 3 Style)
                ======================================================== */}
             <div className="pt-1 space-y-2.5">
-              {/* Note: "50% OFF TODAY ONLY" headline removed as requested */}
 
               {/* Tier Cards (Buy 1 / Buy 2 / Buy 3) */}
               <div className="space-y-2">
@@ -303,7 +374,7 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                         </span>
                       )}
 
-                      {/* Left: Buy X + Subtitle in Black Text */}
+                      {/* Left: Buy X + Subtitle + Free Delivery tag if configured */}
                       <div>
                         <div className="font-bold text-sm text-black">
                           {tier.label}
@@ -311,6 +382,12 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                         {tier.subtitle && (
                           <div className="text-[11px] text-neutral-700 font-normal mt-0.5">
                             {tier.subtitle}
+                          </div>
+                        )}
+                        {tier.freeShipping && (
+                          <div className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md mt-1 border border-emerald-200">
+                            <Check className="w-3 h-3 stroke-[3]" />
+                            <span>Free Delivery (ফ্রি ডেলিভারি)</span>
                           </div>
                         )}
                       </div>
@@ -330,7 +407,7 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
               </div>
             </div>
 
-            {/* Action Buttons (Order Now in HYDEE Maroon, Add To Bag with Maroon Text) */}
+            {/* Action Buttons: Order Now & Order Via WhatsApp */}
             <div className="space-y-2.5 pt-1">
               {/* Order Now (Direct Checkout) */}
               <button
@@ -342,26 +419,26 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                 <ArrowRight className="w-4 h-4" />
               </button>
 
-              {/* Add to Bag (Text in HYDEE Maroon) */}
+              {/* Order Via WhatsApp (Replaces Add To Bag as requested) */}
               <button
-                onClick={handleAddToCartClick}
-                disabled={isOutOfStock}
-                className="w-full bg-white hover:bg-[#800000]/5 text-[#800000] border-2 border-[#800000] text-xs sm:text-sm font-bold tracking-wider py-3.5 rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs disabled:border-neutral-200 disabled:text-neutral-400 active:scale-[0.99]"
+                type="button"
+                onClick={handleWhatsAppOrder}
+                className="w-full bg-[#25D366] hover:bg-[#20ba59] text-white text-xs sm:text-sm font-bold tracking-wider py-3.5 rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md active:scale-[0.99]"
               >
-                <ShoppingBag className="w-4 h-4 stroke-[2.2]" />
-                <span>+ Add To Bag</span>
+                <MessageCircle className="w-5 h-5 fill-white stroke-none" />
+                <span>Order Via WhatsApp</span>
               </button>
             </div>
 
-            {/* Product Description Underneath Add To Bag Button (Increased Font Size & Elegance) */}
+            {/* Product Description Underneath Buttons (whitespace-pre-line preserves newlines & spaces) */}
             <div className="mt-5 pt-5 border-t border-neutral-200/80 space-y-3">
               <h4 className="text-xs sm:text-sm font-bold text-neutral-900 uppercase tracking-widest flex items-center gap-2">
                 <span className="w-1.5 h-1.5 rounded-full bg-[#800000]" />
                 <span>Product Details</span>
               </h4>
-              <p className="font-['Hind_Siliguri',sans-serif] text-[15px] sm:text-base md:text-[17px] text-neutral-800 leading-relaxed font-normal">
+              <div className="font-['Hind_Siliguri',sans-serif] text-[15px] sm:text-base md:text-[17px] text-neutral-800 leading-relaxed font-normal whitespace-pre-line">
                 {product.description || product.shortDescription}
-              </p>
+              </div>
               {product.specifications?.fabric && (
                 <div className="pt-2 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs sm:text-sm text-neutral-700 bg-neutral-50 p-3.5 rounded-xl border border-neutral-200/80">
                   <div>
