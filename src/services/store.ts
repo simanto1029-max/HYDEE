@@ -224,7 +224,7 @@ class StoreService {
       }
 
       const storedProds = localStorage.getItem(STORAGE_KEYS.PRODUCTS);
-      const rawProds: Product[] = storedProds ? JSON.parse(storedProds) : INITIAL_PRODUCTS;
+      const rawProds: Product[] = storedProds ? JSON.parse(storedProds) : [];
       const filtered = rawProds
         .filter((p) => !this.deletedProductIds.has(p.id))
         .map((p) => this.normalizeProductPrices(p));
