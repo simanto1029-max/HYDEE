@@ -220,10 +220,10 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ onNavigateToProduc
     setFormSlug('');
     setFormSku(`HYD-${Date.now().toString().slice(-4)}`);
     setFormCatSlug(categories[0]?.slug || 'three-piece');
-    setFormPrice(16500);
-    setFormCompareAt(19500);
-    setFormCostPrice(7000);
-    setFormStock(10);
+    setFormPrice(1799);
+    setFormCompareAt(2500);
+    setFormCostPrice(900);
+    setFormStock(15);
     setFormDescription('Luxury in every fold. Specially designed for fancy gatherings and graceful evenings.');
     setFormFabric('100% Premium Cotton with intricate embroidery');
     setFormFit('Graceful Long Silhouette with Flared Palazzo');
@@ -245,12 +245,12 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ onNavigateToProduc
       { name: 'Dark Red', imageUrl: '', colorHex: '#800000' },
     ]);
     setFormBundleHeadline('50% OFF TODAY ONLY');
-    setFormTier1Price(16500);
+    setFormTier1Price(1799);
     setFormTier1FreeShipping(false);
-    setFormTier2Price(29700);
+    setFormTier2Price(3238);
     setFormTier2Badge('Most Popular');
     setFormTier2FreeShipping(false);
-    setFormTier3Price(39600);
+    setFormTier3Price(4318);
     setFormTier3FreeShipping(true);
     setIsModalOpen(true);
   };

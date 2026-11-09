@@ -33,78 +33,51 @@ export const HomeView: React.FC<HomeViewProps> = ({
   // Active category filter on homepage
   const [selectedCategorySlug, setSelectedCategorySlug] = useState<string>('all');
 
-  // Hero Showcase Slides with User's Uploaded High-Fashion Editorial Models & HYDEE Royal Maroon Palette
-  const heroShowcaseData = [
-    {
-      id: 0,
-      categorySlug: 'three-piece',
-      categoryLabel: 'Glory Red',
-      headlinePart1: 'Glory Red',
-      headlinePart2: 'Luxury In Every Fold',
-      description:
-        'Pure crimson silk with intricate neckline zardozi and artisanal bandhani printed dupatta. Crafted for fancy gatherings & graceful evenings.',
-      tagline: 'Perfect for fancy gatherings & graceful evenings',
-      productSlug: 'glory-red-hand-embroidered-luxury-three-piece',
-      bgImage: '/images/editorial-glory-red.jpg',
-      bgPosition: 'center 18%',
-    },
-    {
-      id: 1,
-      categorySlug: 'kurti',
-      categoryLabel: 'Royal Heritage',
-      headlinePart1: 'Royal Heritage',
-      headlinePart2: 'Bespoke Silk & Zari',
-      description:
-        'Regal fuchsia pure silk tunic with geometric collar embroidery and flowing palazzo pants set against heritage palace grandeur.',
-      tagline: 'Timeless luxury inspired by Mughal architectural grandeur',
-      productSlug: 'royal-heritage-fuchsia-silk-festive-coord-suit',
-      bgImage: '/images/editorial-royal-heritage.jpg',
-      bgPosition: 'center 18%',
-    },
-    {
-      id: 2,
-      categorySlug: 'three-piece',
-      categoryLabel: 'Essence of Eid',
-      headlinePart1: 'Essence of Eid',
-      headlinePart2: 'Pure Silk & Bronze Zari',
-      description:
-        '30+ years of generational artisanal legacy. Pure mulberry and raw silk in warm champagne gold and antique rose with metallic bronze dupattas.',
-      tagline: 'Generational craftsmanship, 30+ years of legacy',
-      productSlug: 'lateef-essence-of-eid-pure-silk-kurti-dupatta-ensemble',
-      bgImage: '/images/editorial-eid-silk.jpg',
-      bgPosition: 'center 18%',
-    },
-    {
-      id: 3,
-      categorySlug: 'sharees',
-      categoryLabel: 'Sharees',
-      headlinePart1: 'Manthagini',
-      headlinePart2: 'Pure Silk & Gold Zari',
-      description:
-        'Celebrates the generational heritage of handloom weaving. 100% pure silk in royal maroon with opulent antique gold temple zari borders.',
-      tagline: 'Artistry in silk, tradition in every fold',
-      productSlug: 'manthagini-maroon-pure-silk-handloom-sharee',
-      bgImage: '/images/editorial-sharee-manthagini.jpg',
-      bgPosition: 'center 15%',
-    },
-    {
-      id: 4,
-      categorySlug: 'borqa',
-      categoryLabel: 'Borkha & Abaya',
-      headlinePart1: 'Haute Modesty',
-      headlinePart2: 'Korean Nida Abaya',
-      description:
-        'Grade-A imported Korean Nida silk in royal maroon with delicate cuff embroidery and coordinating champagne satin hijab.',
-      tagline: 'Refined modest silhouettes crafted with quiet elegance',
-      productSlug: 'imperial-maroon-korean-nida-luxury-abaya-champagne-hijab',
-      bgImage: '/images/editorial-borqa-maroon.jpg',
-      bgPosition: 'center 15%',
-    },
-  ];
+  // Dynamically generate hero showcase from real products (NO fake mock products)
+  const heroShowcaseData = React.useMemo(() => {
+    if (allProducts.length === 0) {
+      return [
+        {
+          id: 0,
+          categorySlug: 'all',
+          categoryLabel: 'HYDEE Collection',
+          headlinePart1: 'HYDEE Bespoke',
+          headlinePart2: 'Luxury In Every Fold',
+          description: 'Handcrafted haute couture silhouettes designed with generational artisanal legacy in Tangail, Bangladesh.',
+          tagline: 'Handcrafted in Tangail · 100% Bespoke Elegance',
+          productSlug: '',
+          bgImage: '/images/editorial-glory-red.jpg',
+          bgPosition: 'center 18%',
+        },
+      ];
+    }
+
+    const featured = allProducts.filter((p) => p.isFeatured || p.isHangerFeatured);
+    const pool = featured.length > 0 ? featured : allProducts;
+
+    return pool.slice(0, 6).map((p, idx) => {
+      const words = p.name.split(' ');
+      const p1 = words.slice(0, Math.min(3, words.length)).join(' ');
+      const p2 = words.slice(Math.min(3, words.length)).join(' ') || 'Atelier Collection';
+      return {
+        id: idx,
+        categorySlug: p.categorySlug,
+        categoryLabel: p.categoryName || 'Exclusive Piece',
+        headlinePart1: p1,
+        headlinePart2: p2,
+        description: p.shortDescription || p.description?.slice(0, 150) || 'Luxury in every fold. Handcrafted in Tangail.',
+        tagline: `৳${p.price.toLocaleString()} · Handcrafted in Tangail`,
+        productSlug: p.slug,
+        bgImage: p.images[0] || '/images/editorial-glory-red.jpg',
+        bgPosition: 'center 18%',
+      };
+    });
+  }, [allProducts]);
 
   const [activeSlide, setActiveSlide] = useState(0);
 
-  const currentHero = heroShowcaseData[activeSlide];
+  const safeSlideIndex = activeSlide < heroShowcaseData.length ? activeSlide : 0;
+  const currentHero = heroShowcaseData[safeSlideIndex] || heroShowcaseData[0];
 
   const nextSlide = () => {
     setActiveSlide((prev) => (prev + 1) % heroShowcaseData.length);
@@ -230,7 +203,13 @@ export const HomeView: React.FC<HomeViewProps> = ({
             <div className="pt-2">
               <button
                 type="button"
-                onClick={() => onNavigate(`/products/${currentHero.productSlug}`)}
+                onClick={() => {
+                  if (currentHero && currentHero.productSlug) {
+                    onNavigate(`/products/${currentHero.productSlug}`);
+                  } else {
+                    onNavigate('/products');
+                  }
+                }}
                 className="bg-white hover:bg-neutral-100 text-neutral-950 font-bold text-xs sm:text-sm px-7 py-3 sm:px-8 sm:py-3.5 rounded-full tracking-wide flex items-center gap-2 shadow-xl hover:shadow-2xl transition-all cursor-pointer active:scale-95 border border-white/40"
               >
                 <span>Get The Look</span>

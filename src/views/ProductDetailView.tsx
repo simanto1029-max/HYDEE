@@ -158,9 +158,24 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
     },
   ];
 
-  const activeTiers = (product.bundleTiers && product.bundleTiers.length > 0)
-    ? product.bundleTiers
-    : defaultTiers;
+  const activeTiers = React.useMemo(() => {
+    const rawTiers = (product.bundleTiers && product.bundleTiers.length > 0)
+      ? product.bundleTiers
+      : defaultTiers;
+
+    return rawTiers.map((t, idx) => {
+      if (idx === 0) {
+        return { ...t, price: unitPrice };
+      }
+      if (idx === 1 && (!t.price || t.price > unitPrice * 3 || t.price < unitPrice)) {
+        return { ...t, price: Math.round(unitPrice * 2 * 0.9) };
+      }
+      if (idx === 2 && (!t.price || t.price > unitPrice * 4 || t.price < unitPrice)) {
+        return { ...t, price: Math.round(unitPrice * 3 * 0.8) };
+      }
+      return t;
+    });
+  }, [product.bundleTiers, unitPrice]);
 
   const currentTier = activeTiers[selectedTierIndex] || activeTiers[0];
   const tierQuantity = currentTier.quantity;

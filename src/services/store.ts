@@ -23,6 +23,11 @@ import {
   INITIAL_SITE_SETTINGS,
 } from './mockData';
 import { supabase, isSupabaseConfigured } from './supabase';
+import {
+  saveAllProductsIDB,
+  getAllProductsIDB,
+  deleteSingleProductIDB,
+} from './db';
 
 export const INITIAL_COUPONS: Coupon[] = [
   {
@@ -103,6 +108,7 @@ class StoreService {
 
   constructor() {
     this.loadFromStorage();
+    this.loadFromIndexedDB();
     if (isSupabaseConfigured && supabase) {
       this.syncFromSupabase();
     } else {
@@ -116,6 +122,83 @@ class StoreService {
 
   public getHasInitialSyncCompleted(): boolean {
     return this.hasInitialSyncCompleted;
+  }
+
+  public normalizeProductPrices(p: Product): Product {
+    const prodPrice = Number(p.price) || 1799;
+    const compareAt = p.compareAtPrice ? Number(p.compareAtPrice) : undefined;
+
+    // Normalize variants to have the exact same price as product
+    const normalizedVariants = (p.variants || []).map((v) => ({
+      ...v,
+      price: prodPrice,
+      compareAtPrice: compareAt,
+    }));
+
+    // Normalize bundle tiers
+    let tiers = p.bundleTiers && Array.isArray(p.bundleTiers) && p.bundleTiers.length > 0 ? [...p.bundleTiers] : [];
+    if (tiers.length === 0) {
+      tiers = [
+        { quantity: 1, label: 'Buy 1', subtitle: 'Standard Edition', price: prodPrice, freeShipping: false },
+        { quantity: 2, label: 'Buy 2', subtitle: 'Save 10% Extra', badge: 'Most Popular', price: Math.round(prodPrice * 2 * 0.9), freeShipping: false },
+        { quantity: 3, label: 'Buy 3', subtitle: 'Save 20% Extra + Free Delivery', price: Math.round(prodPrice * 3 * 0.8), freeShipping: true },
+      ];
+    } else {
+      tiers[0] = { ...tiers[0], price: prodPrice };
+      if (!tiers[1]?.price || tiers[1].price > prodPrice * 3 || tiers[1].price < prodPrice) {
+        tiers[1] = {
+          ...tiers[1],
+          label: tiers[1]?.label || 'Buy 2',
+          price: Math.round(prodPrice * 2 * 0.9),
+        };
+      }
+      if (!tiers[2]?.price || tiers[2].price > prodPrice * 4 || tiers[2].price < prodPrice) {
+        tiers[2] = {
+          ...tiers[2],
+          label: tiers[2]?.label || 'Buy 3',
+          price: Math.round(prodPrice * 3 * 0.8),
+          freeShipping: true,
+        };
+      }
+    }
+
+    return {
+      ...p,
+      price: prodPrice,
+      compareAtPrice: compareAt,
+      variants: normalizedVariants.length > 0 ? normalizedVariants : [
+        { id: `v-${p.id}-std`, name: 'Free Size', size: 'Free Size', color: 'Signature', sku: `${p.sku}-STD`, price: prodPrice, compareAtPrice: compareAt, stock: p.stock ?? 10 }
+      ],
+      bundleTiers: tiers,
+    };
+  }
+
+  private async loadFromIndexedDB() {
+    try {
+      const idbProducts = await getAllProductsIDB();
+      if (Array.isArray(idbProducts) && idbProducts.length > 0) {
+        const valid = idbProducts
+          .filter((p) => !this.deletedProductIds.has(p.id))
+          .map((p) => this.normalizeProductPrices(p));
+
+        if (valid.length > 0) {
+          const map = new Map<string, Product>();
+          this.products.forEach((p) => map.set(p.id, p));
+          valid.forEach((p) => map.set(p.id, p));
+          const merged = Array.from(map.values());
+
+          // If user has real custom products, drop demo placeholder prod-tp-glory
+          if (merged.some((p) => p.id !== 'prod-tp-glory')) {
+            this.products = merged.filter((p) => p.id !== 'prod-tp-glory' || !this.deletedProductIds.has('prod-tp-glory'));
+          } else {
+            this.products = merged;
+          }
+          this.notify();
+        }
+      }
+    } catch (e) {
+      console.warn('Error loading from IndexedDB:', e);
+    }
   }
 
   private loadFromStorage() {
@@ -142,25 +225,16 @@ class StoreService {
 
       const storedProds = localStorage.getItem(STORAGE_KEYS.PRODUCTS);
       const rawProds: Product[] = storedProds ? JSON.parse(storedProds) : INITIAL_PRODUCTS;
-      this.products = rawProds
+      const filtered = rawProds
         .filter((p) => !this.deletedProductIds.has(p.id))
-        .map((p) => {
-          // Normalize legacy 16500 demo placeholder so it never flashes on load
-          if (p.price === 16500) {
-            return {
-              ...p,
-              price: 1799,
-              compareAtPrice: 2500,
-              variants: (p.variants || []).map((v) => ({ ...v, price: 1799, compareAtPrice: 2500 })),
-              bundleTiers: [
-                { quantity: 1, label: 'Buy 1', subtitle: 'Standard Edition', price: 1799, freeShipping: false },
-                { quantity: 2, label: 'Buy 2', subtitle: 'Save 10% Extra', price: 3238, badge: 'Most Popular', freeShipping: false },
-                { quantity: 3, label: 'Buy 3', subtitle: 'Save 20% Extra + Free Delivery', price: 4318, freeShipping: true },
-              ],
-            };
-          }
-          return p;
-        });
+        .map((p) => this.normalizeProductPrices(p));
+
+      // If user has created custom pieces, do not pollute with initial mock product
+      if (filtered.some((p) => p.id !== 'prod-tp-glory')) {
+        this.products = filtered.filter((p) => p.id !== 'prod-tp-glory' || !this.deletedProductIds.has('prod-tp-glory'));
+      } else {
+        this.products = filtered;
+      }
 
       const storedCats = localStorage.getItem(STORAGE_KEYS.CATEGORIES);
       const rawCats: Category[] = storedCats ? JSON.parse(storedCats) : INITIAL_CATEGORIES;
@@ -168,7 +242,6 @@ class StoreService {
 
       const storedOrders = localStorage.getItem(STORAGE_KEYS.ORDERS);
       this.orders = storedOrders ? JSON.parse(storedOrders) : [];
-      // Clean premature tracking codes on orders not yet dispatched
       if (this.orders && Array.isArray(this.orders)) {
         this.orders.forEach((o) => {
           if (o.status !== 'SHIPPED' && o.status !== 'DELIVERED') {
@@ -237,8 +310,28 @@ class StoreService {
   }
 
   private persist() {
+    // 1. Always persist full uncompressed products into IndexedDB (no 5MB limit!)
+    saveAllProductsIDB(this.products).catch(() => {});
+
+    // 2. Try saving to localStorage with graceful fallback
     try {
       localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(this.products));
+    } catch (e: any) {
+      console.warn('localStorage quota warning, caching compact version:', e);
+      try {
+        localStorage.removeItem(STORAGE_KEYS.LOGS);
+        localStorage.removeItem(STORAGE_KEYS.COUPONS);
+        const compact = this.products.map((p) => ({
+          ...p,
+          images: p.images.slice(0, 2),
+        }));
+        localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(compact));
+      } catch (err2) {
+        console.warn('localStorage full, relying on IndexedDB & Supabase');
+      }
+    }
+
+    try {
       localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(this.categories));
       localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(this.orders));
       localStorage.setItem(STORAGE_KEYS.CART, JSON.stringify(this.cart));
@@ -248,17 +341,7 @@ class StoreService {
       localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(this.settings));
       localStorage.setItem(STORAGE_KEYS.PROMO, JSON.stringify(this.promoPopup));
       localStorage.setItem(STORAGE_KEYS.LOGS, JSON.stringify(this.auditLogs));
-    } catch (e: any) {
-      console.warn('Storage quota warning, recovering space for products:', e);
-      try {
-        localStorage.removeItem(STORAGE_KEYS.LOGS);
-        localStorage.removeItem(STORAGE_KEYS.COUPONS);
-        localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(this.products));
-        localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(this.categories));
-      } catch (err2) {
-        console.error('Failed to recover storage space:', err2);
-      }
-    }
+    } catch (e) {}
     this.notify();
   }
 
@@ -306,8 +389,14 @@ class StoreService {
       if (prodData && prodData.length > 0) {
         const activeRows = prodData.filter((p: any) => p.is_archived !== true);
         if (activeRows.length > 0) {
-          this.products = activeRows.map((p: any) => this.mapSupabaseProduct(p));
-          // Save directly to localStorage so all future reloads load in 0ms
+          const mapped = activeRows.map((p: any) => this.normalizeProductPrices(this.mapSupabaseProduct(p)));
+          // If we have custom pieces, remove the initial demo piece
+          if (mapped.some((p) => p.id !== 'prod-tp-glory')) {
+            this.products = mapped.filter((p) => p.id !== 'prod-tp-glory' || !this.deletedProductIds.has('prod-tp-glory'));
+          } else {
+            this.products = mapped;
+          }
+          saveAllProductsIDB(this.products).catch(() => {});
           try {
             localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(this.products));
           } catch (e) {}
@@ -516,17 +605,48 @@ class StoreService {
     const local = this.getProductBySlug(slug);
     if (local) return local;
 
+    // Fast check from IndexedDB
+    try {
+      const idbList = await getAllProductsIDB();
+      if (Array.isArray(idbList)) {
+        const clean = decodeURIComponent(slug).split('?')[0].split('#')[0].trim().replace(/\/+$/, '').toLowerCase();
+        const idbMatch = idbList.find(
+          (p: any) =>
+            (p.slug || '').toLowerCase() === clean ||
+            (p.id || '').toLowerCase() === clean ||
+            (p.sku || '').toLowerCase() === clean
+        );
+        if (idbMatch) {
+          const norm = this.normalizeProductPrices(idbMatch);
+          const existingIdx = this.products.findIndex((p) => p.id === norm.id || p.slug === norm.slug);
+          if (existingIdx >= 0) {
+            this.products[existingIdx] = norm;
+          } else {
+            this.products.unshift(norm);
+          }
+          this.notify();
+          return norm;
+        }
+      }
+    } catch (e) {}
+
     if (isSupabaseConfigured && supabase) {
       const clean = decodeURIComponent(slug).split('?')[0].split('#')[0].trim().replace(/\/+$/, '');
       try {
-        const { data, error } = await supabase
+        const queryPromise = supabase
           .from('products')
           .select('*')
           .or(`slug.eq.${clean},id.eq.${clean},sku.eq.${clean}`)
           .maybeSingle();
 
+        const timeoutPromise = new Promise<{ data: null; error: null }>((resolve) =>
+          setTimeout(() => resolve({ data: null, error: null }), 1200)
+        );
+
+        const { data, error } = (await Promise.race([queryPromise, timeoutPromise])) as any;
+
         if (!error && data) {
-          const mapped = this.mapSupabaseProduct(data);
+          const mapped = this.normalizeProductPrices(this.mapSupabaseProduct(data));
           const idx = this.products.findIndex((p) => p.id === mapped.id || p.slug === mapped.slug);
           if (idx >= 0) {
             this.products[idx] = mapped;
@@ -537,7 +657,7 @@ class StoreService {
           return mapped;
         }
       } catch (e) {
-        console.warn('Error fetching product by slug:', e);
+        console.warn('Fast timeout or error fetching product by slug:', e);
       }
     }
     return undefined;
@@ -692,6 +812,7 @@ class StoreService {
 
   deleteProduct(id: string) {
     this.deletedProductIds.add(id);
+    deleteSingleProductIDB(id).catch(() => {});
     try {
       localStorage.setItem(STORAGE_KEYS.DELETED_PRODUCTS, JSON.stringify(Array.from(this.deletedProductIds)));
     } catch (e) {
