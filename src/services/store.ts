@@ -377,20 +377,51 @@ class StoreService {
         }));
       }
 
-      // 2. Fetch Products
-      const { data: prodData, error: prodError } = await supabase
+      // 2. Fetch Products (in small batches so heavy rows never hit the Supabase timeout)
+      const { data: idRows, error: idError } = await supabase
         .from('products')
-        .select('*');
+        .select('id, is_archived, created_at')
+        .order('created_at', { ascending: false });
 
-      if (prodError) {
-        console.error('Supabase products fetch error:', prodError.message, prodError.details);
+      if (idError) {
+        console.error('Supabase products id fetch error:', idError.message, idError.details);
       }
 
-      if (!prodError && prodData) {
-        const activeRows = prodData.filter((p: any) => p.is_archived !== true);
-        this.products = activeRows.map((p: any) =>
-          this.normalizeProductPrices(this.mapSupabaseProduct(p))
-        );
+      if (!idError && idRows) {
+        const activeIds = idRows
+          .filter((r: any) => r.is_archived !== true)
+          .map((r: any) => r.id as string);
+
+        const loaded: Product[] = [];
+        const BATCH_SIZE = 2;
+        let anyBatchFailed = false;
+
+        for (let i = 0; i < activeIds.length; i += BATCH_SIZE) {
+          const batchIds = activeIds.slice(i, i + BATCH_SIZE);
+          const { data: rows, error: batchError } = await supabase
+            .from('products')
+            .select('*')
+            .in('id', batchIds);
+
+          if (batchError) {
+            anyBatchFailed = true;
+            console.error('Supabase products batch error:', batchError.message, batchError.details);
+            continue;
+          }
+
+          (rows || []).forEach((p: any) => {
+            loaded.push(this.normalizeProductPrices(this.mapSupabaseProduct(p)));
+          });
+
+          // Show what we have so far right away (progressive loading)
+          this.products = [...loaded];
+          this.notify();
+        }
+
+        if (activeIds.length === 0 || !anyBatchFailed) {
+          this.products = loaded;
+        }
+
         saveAllProductsIDB(this.products).catch(() => {});
         try {
           localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(this.products));
