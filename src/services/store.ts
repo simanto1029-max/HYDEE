@@ -387,21 +387,16 @@ class StoreService {
       }
 
       if (prodData && prodData.length > 0) {
-        const activeRows = prodData.filter((p: any) => p.is_archived !== true);
-        if (activeRows.length > 0) {
-          const mapped = activeRows.map((p: any) => this.normalizeProductPrices(this.mapSupabaseProduct(p)));
-          // If we have custom pieces, remove the initial demo piece
-          if (mapped.some((p) => p.id !== 'prod-tp-glory')) {
-            this.products = mapped.filter((p) => p.id !== 'prod-tp-glory' || !this.deletedProductIds.has('prod-tp-glory'));
-          } else {
-            this.products = mapped;
-          }
-          saveAllProductsIDB(this.products).catch(() => {});
-          try {
-            localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(this.products));
-          } catch (e) {}
-        }
-      }
+        if (!prodError && prodData) {
+  const activeRows = prodData.filter((p: any) => p.is_archived !== true);
+  this.products = activeRows.map((p: any) =>
+    this.normalizeProductPrices(this.mapSupabaseProduct(p))
+  );
+  saveAllProductsIDB(this.products).catch(() => {});
+  try {
+    localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(this.products));
+  } catch (e) {}
+}
 
       // 3. Fetch Orders
       const { data: orderData, error: orderError } = await supabase
