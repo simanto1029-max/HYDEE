@@ -18,7 +18,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
     };
   }, []);
 
-  const cleanWhatsapp = (settings.whatsappNumber || '8801700000000').replace(/[^0-9]/g, '');
+  const cleanWhatsapp = (settings.whatsappNumber || '8801601705804').replace(/[^0-9]/g, '');
   const locationText = settings.tangailLocation || settings.address || 'Tangail, Dhaka Division, Bangladesh';
 
   const handleWhatsAppChat = () => {
@@ -131,7 +131,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
                     onClick={handleWhatsAppChat}
                     className="font-bold text-emerald-800 hover:underline transition-colors cursor-pointer"
                   >
-                    {settings.whatsappNumber || '01711002233'} (Click to Chat)
+                    {settings.whatsappNumber ? settings.whatsappNumber.replace(/^88/, '') : '01601705804'} (Click to Chat)
                   </button>
                 </div>
               </div>

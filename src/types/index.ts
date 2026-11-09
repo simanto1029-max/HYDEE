@@ -227,6 +227,8 @@ export interface SiteSettings {
   courierPathaoApiKey?: string;
   currencySymbol: string; // "৳"
   stickyHeader: boolean;
+  bkashNumber?: string; // e.g. "01601705804"
+  nagadNumber?: string; // e.g. "01601705804"
   announcementBarText?: string;
   announcementBarEnabled: boolean;
   supabaseConnected: boolean;

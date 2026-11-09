@@ -8,7 +8,8 @@ export const FloatingConcierge: React.FC = () => {
 
   const handleStartWhatsApp = (prefillMessage: string) => {
     const text = encodeURIComponent(prefillMessage);
-    window.open(`https://wa.me/${settings.whatsappNumber}?text=${text}`, '_blank');
+    const num = (settings.whatsappNumber || '8801601705804').replace(/[^0-9]/g, '');
+    window.open(`https://wa.me/${num}?text=${text}`, '_blank');
   };
 
   return (

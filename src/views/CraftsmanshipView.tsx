@@ -77,7 +77,7 @@ export const CraftsmanshipView: React.FC<CraftsmanshipViewProps> = ({ onNavigate
             <div className="pt-2">
               <button
                 onClick={() => {
-                  window.open('https://wa.me/8801711002233?text=Hello%20HYDEE%20Atelier,%20I%20would%20like%20to%20book%20a%20private%20styling%20appointment.', '_blank');
+                  window.open('https://wa.me/8801601705804?text=Hello%20HYDEE%20Atelier,%20I%20would%20like%20to%20book%20a%20private%20styling%20appointment.', '_blank');
                 }}
                 className="bg-[#800000] hover:bg-[#5c0000] text-white text-xs font-semibold px-6 py-3.5 rounded-full uppercase tracking-wider inline-flex items-center gap-2"
               >

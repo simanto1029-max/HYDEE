@@ -26,14 +26,26 @@ export default function App() {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [directBuyItem, setDirectBuyItem] = useState<CartItem | null>(null);
+  const [isInitialLoading, setIsInitialLoading] = useState<boolean>(!store.getHasInitialSyncCompleted());
 
-  // Subscribe to store updates
+  // Subscribe to store updates & initial sync completion
   useEffect(() => {
-    const unsubscribe = store.subscribe(() => {
+    const handleStoreChange = () => {
       setCartItems(store.getCart());
-    });
+      if (store.getHasInitialSyncCompleted()) {
+        setIsInitialLoading(false);
+      }
+    };
+    const unsubscribe = store.subscribe(handleStoreChange);
+
+    // Failsafe timeout to smoothly dismiss loader after max 1.2s
+    const timeout = setTimeout(() => {
+      setIsInitialLoading(false);
+    }, 1200);
+
     return () => {
       unsubscribe();
+      clearTimeout(timeout);
     };
   }, []);
 
@@ -227,6 +239,31 @@ export default function App() {
 
   return (
     <div className="min-h-screen flex flex-col bg-[#FAF9F7] text-neutral-900 selection:bg-[#800000] selection:text-white pb-16 md:pb-0">
+      {/* Luxury Initial Sync / Refresh Overlay (prevents any visual price jumps) */}
+      {isInitialLoading && !isAdminView && (
+        <div className="fixed inset-0 z-100 flex flex-col items-center justify-center bg-white/95 backdrop-blur-xs transition-opacity duration-300">
+          <div className="text-center space-y-4 px-6 max-w-sm">
+            <img
+              src="/assets/aistudio/hydee_wordmark_transparent.png"
+              alt="HYDEE"
+              className="h-10 sm:h-12 w-auto mx-auto object-contain"
+            />
+            <div className="space-y-1">
+              <span className="text-[10px] uppercase tracking-widest text-[#800000] font-bold block">
+                Atelier Women Collection · Tangail
+              </span>
+              <p className="text-xs text-neutral-500 font-medium">
+                Loading bespoke collections...
+              </p>
+            </div>
+            {/* Elegant indeterminate progress bar */}
+            <div className="w-48 h-1 bg-neutral-200 rounded-full mx-auto overflow-hidden relative">
+              <div className="absolute top-0 bottom-0 left-0 bg-[#800000] w-1/2 rounded-full animate-pulse" />
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header only for public store views */}
       {!isAdminView && (
         <Header

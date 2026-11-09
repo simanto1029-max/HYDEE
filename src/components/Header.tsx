@@ -30,7 +30,7 @@ export const Header: React.FC<HeaderProps> = ({
     };
   }, []);
 
-  const cleanWhatsapp = (settings.whatsappNumber || '8801700000000').replace(/[^0-9]/g, '');
+  const cleanWhatsapp = (settings.whatsappNumber || '8801601705804').replace(/[^0-9]/g, '');
 
   const handleWhatsAppChat = () => {
     const text = encodeURIComponent('Hello HYDEE Atelier! I would like personal styling and bespoke order assistance.');

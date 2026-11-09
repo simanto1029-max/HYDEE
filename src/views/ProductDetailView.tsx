@@ -98,12 +98,14 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
       subtitle: 'Save 10% Extra',
       badge: 'Most Popular',
       price: Math.round(unitPrice * 2 * 0.9),
+      freeShipping: false,
     },
     {
       quantity: 3,
       label: 'Buy 3',
-      subtitle: 'Save 20% Extra',
+      subtitle: 'Save 20% Extra + Free Delivery',
       price: Math.round(unitPrice * 3 * 0.8),
+      freeShipping: true,
     },
   ];
 
@@ -115,6 +117,15 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
   const tierQuantity = currentTier.quantity;
   const tierTotalPrice = selectedTierIndex === 0 ? unitPrice : (currentTier.price ?? (unitPrice * tierQuantity));
   const effectiveUnitPrice = Math.round(tierTotalPrice / tierQuantity);
+
+  const isTierFreeShipping = (t: BundleTier) => {
+    return Boolean(
+      t.freeShipping ||
+      t.subtitle?.toLowerCase().includes('free delivery') ||
+      t.subtitle?.includes('ফ্রি ডেলিভারি') ||
+      t.quantity >= 3
+    );
+  };
 
   // Extract unique colors for interactive color circles
   const colorMap = new Map<string, { color: string; colorHex?: string; variantId: string }>();
@@ -137,15 +148,17 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
   };
 
   const handleBuyNowClick = () => {
-    onBuyNow(product, selectedVariant?.id, tierQuantity, effectiveUnitPrice, currentTier.freeShipping);
+    onBuyNow(product, selectedVariant?.id, tierQuantity, effectiveUnitPrice, isTierFreeShipping(currentTier));
   };
 
   const handleWhatsAppOrder = () => {
+    const settings = store.getSettings();
+    const cleanNumber = (settings.whatsappNumber || '8801601705804').replace(/[^0-9]/g, '') || '8801601705804';
     const sizeText = product.hasSizes !== false && selectedVariant?.size && selectedVariant.size !== 'Free Size' ? `\n• Size: ${selectedVariant.size}` : '';
     const colorText = selectedVariant?.color ? `\n• Color: ${selectedVariant.color}` : '';
-    const freeShipText = currentTier.freeShipping ? ' (Free Delivery 🎉)' : '';
+    const freeShipText = isTierFreeShipping(currentTier) ? ' (Free Delivery 🎉)' : '';
     const message = `Hello HYDEE! I would like to place an order for:\n\n✨ Product: ${product.name}${sizeText}${colorText}\n📦 Quantity: ${tierQuantity} item(s) (${currentTier.label})\n💰 Total Price: ৳${tierTotalPrice.toLocaleString()}${freeShipText}\n\nProduct Link: ${window.location.origin}/products/${product.slug}`;
-    const url = `https://wa.me/8801977771029?text=${encodeURIComponent(message)}`;
+    const url = `https://wa.me/${cleanNumber}?text=${encodeURIComponent(message)}`;
     window.open(url, '_blank');
   };
 
@@ -391,7 +404,7 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                             {tier.subtitle}
                           </div>
                         )}
-                        {tier.freeShipping && (
+                        {isTierFreeShipping(tier) && (
                           <div className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md mt-1 border border-emerald-200">
                             <Check className="w-3 h-3 stroke-[3]" />
                             <span>Free Delivery (ফ্রি ডেলিভারি)</span>

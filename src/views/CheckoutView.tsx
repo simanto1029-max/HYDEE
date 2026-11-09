@@ -88,6 +88,14 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
   const payableNow = paymentType === 'full_prepaid' ? totalAmount : 0;
   const doorstepCodDue = paymentType === 'full_prepaid' ? 0 : totalAmount;
 
+  const siteSettings = store.getSettings();
+  const bkashWalletNumber = siteSettings.bkashNumber || '01601705804';
+  const nagadWalletNumber = siteSettings.nagadNumber || '01601705804';
+  const activeChannelNumber = subPaymentChannel === 'bkash' ? bkashWalletNumber : nagadWalletNumber;
+  const formattedActiveNumber = activeChannelNumber.length === 11
+    ? `${activeChannelNumber.slice(0, 5)}-${activeChannelNumber.slice(5)}`
+    : activeChannelNumber;
+
   // Track InitiateCheckout on mount
   useEffect(() => {
     if (checkoutItems.length > 0) {
@@ -750,178 +758,198 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
       {/* Payment Options Modal (Opens only when customer chooses 100% Full Prepayment) */}
       {pendingOrder && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-xs animate-in fade-in"
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-xs animate-in fade-in"
           onClick={(e) => {
             if (e.target === e.currentTarget) setPendingOrder(null);
           }}
         >
-          <div className="bg-white rounded-2xl sm:rounded-3xl max-w-lg w-full max-h-[92vh] flex flex-col shadow-2xl border border-neutral-300 overflow-hidden relative text-black">
+          <div className="bg-white rounded-3xl max-w-md w-full max-h-[92vh] flex flex-col shadow-2xl border border-neutral-100 overflow-hidden relative text-neutral-900 animate-in zoom-in-95 duration-200">
             
             {/* Modal Header */}
-            <div className="sticky top-0 z-20 bg-white px-5 sm:px-6 py-4 border-b border-neutral-200 flex items-center justify-between shrink-0">
-              <div>
-                <span className="text-[10px] font-bold tracking-widest text-[#800000] uppercase block">
-                  Full Order Prepayment (100% Pre-paid)
-                </span>
-                <h3 className="font-serif text-lg sm:text-xl font-bold text-black mt-0.5">
-                  Confirm ৳{payableNow.toLocaleString()} Payment
-                </h3>
+            <div className="sticky top-0 z-20 bg-white px-5 sm:px-6 py-4.5 border-b border-neutral-100 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-full bg-[#800000]/10 flex items-center justify-center text-[#800000] shrink-0">
+                  <ShieldCheck className="w-4.5 h-4.5 text-[#800000]" />
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold tracking-widest text-[#800000] uppercase block">
+                    100% Secure Prepayment
+                  </span>
+                  <h3 className="font-serif text-base sm:text-lg font-bold text-neutral-900">
+                    Payment Verification
+                  </h3>
+                </div>
               </div>
-              <div className="flex items-center space-x-2">
-                <span className="text-xs font-mono font-bold bg-neutral-100 px-2.5 py-1 rounded-md text-black border border-neutral-300">
+
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-mono font-bold bg-neutral-100 px-2 py-0.5 rounded text-neutral-700">
                   {pendingOrder.orderNumber}
                 </span>
                 <button
                   type="button"
                   onClick={() => setPendingOrder(null)}
-                  className="w-8 h-8 rounded-full bg-neutral-100 hover:bg-neutral-200 text-black flex items-center justify-center transition-colors cursor-pointer"
-                  title="Close and edit details"
+                  className="w-7 h-7 rounded-full bg-neutral-100 hover:bg-neutral-200 text-neutral-500 hover:text-neutral-900 flex items-center justify-center transition-colors cursor-pointer"
+                  title="Close and return to checkout"
                 >
-                  <X className="w-4 h-4 text-black" />
+                  <X className="w-3.5 h-3.5" />
                 </button>
               </div>
             </div>
 
             {/* Modal Content */}
             <div className="overflow-y-auto p-5 sm:p-6 space-y-4 text-xs flex-1 touch-scroll">
-              <div className="p-4 bg-neutral-50 border border-neutral-300 rounded-2xl space-y-1.5 text-black">
-                <div className="flex justify-between items-center text-xs">
-                  <span className="font-bold text-black">Order Reference:</span>
-                  <span className="font-mono font-bold text-black">{pendingOrder.orderNumber}</span>
+              
+              {/* Clean Payable Amount Card */}
+              <div className="p-4 rounded-2xl bg-[#FAFAFA] border border-neutral-200/70 flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-neutral-500 tracking-wider block">
+                    Total Payable Amount
+                  </span>
+                  <div className="font-sans text-2xl font-black text-[#800000] tracking-tight mt-0.5">
+                    ৳{payableNow.toLocaleString()}
+                  </div>
                 </div>
-                <div className="flex justify-between items-center text-xs">
-                  <span className="font-bold text-black">Full Order Prepayment:</span>
-                  <span className="font-extrabold text-[#800000]">৳{payableNow.toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between items-center text-xs">
-                  <span className="font-bold text-black">Doorstep COD Balance:</span>
-                  <span className="font-bold text-black">৳0 (Fully Paid)</span>
+                <div className="text-right">
+                  <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
+                    <Check className="w-3.5 h-3.5 text-emerald-700 stroke-[3]" />
+                    <span>৳0 Due At Doorstep</span>
+                  </span>
                 </div>
               </div>
 
               {paymentError && (
-                <div className="p-3 bg-red-50 border border-red-300 text-black text-xs rounded-xl flex items-center gap-2 font-semibold">
-                  <AlertCircle className="w-4 h-4 text-red-700 shrink-0" />
+                <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl flex items-center gap-2 font-medium">
+                  <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
                   <span>{paymentError}</span>
                 </div>
               )}
 
-              {/* Gateway Notice Box */}
-              <div className="p-3.5 bg-white rounded-xl border border-neutral-300 flex items-start gap-2.5">
-                <Clock className="w-4 h-4 text-black shrink-0 mt-0.5" />
-                <div className="text-[11px] text-black leading-relaxed font-medium">
-                  <strong className="font-bold text-black">Payment Notice: </strong>
-                  Please transfer <strong>৳{payableNow.toLocaleString()}</strong> (Full Order Value) via bKash or Nagad to our merchant/official wallet, then enter your TrxID below to confirm your order.
-                </div>
-              </div>
-
-              {/* Transfer Channel Selector (Matching User's Screenshot) */}
+              {/* Gateway Channel Selector */}
               <div>
-                <span className="block text-[11px] uppercase font-bold text-black tracking-wider mb-2">
-                  Select Transfer Channel:
-                </span>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                  {/* bKash Button */}
+                <label className="block text-[11px] font-bold text-neutral-700 uppercase tracking-wider mb-2">
+                  Select Payment Method:
+                </label>
+                <div className="grid grid-cols-2 gap-2.5">
+                  
+                  {/* bKash */}
                   <button
                     type="button"
                     onClick={() => setSubPaymentChannel('bkash')}
-                    className={`p-3 rounded-xl border flex items-center justify-between text-xs font-bold transition-all cursor-pointer ${
+                    className={`p-3 rounded-2xl border text-left transition-all cursor-pointer relative ${
                       subPaymentChannel === 'bkash'
-                        ? 'border-2 border-black bg-white shadow-xs'
-                        : 'border-neutral-300 bg-neutral-100 hover:border-black text-black'
+                        ? 'border-[#D12053] bg-[#D12053]/[0.05] ring-2 ring-[#D12053]/30 shadow-2xs'
+                        : 'border-neutral-200 bg-white hover:border-neutral-300'
                     }`}
                   >
-                    <div className="flex items-center gap-2">
-                      <span className="w-5 h-5 rounded-md bg-[#e2136e] text-white flex items-center justify-center text-[10px] font-bold shrink-0">
-                        b
-                      </span>
-                      <span className="text-black font-bold">bKash</span>
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center gap-2">
+                        <span className="w-5 h-5 rounded-md bg-[#D12053] text-white font-bold text-[10px] flex items-center justify-center shrink-0">
+                          b
+                        </span>
+                        <span className="font-bold text-xs text-neutral-900">bKash</span>
+                      </div>
+                      {subPaymentChannel === 'bkash' && (
+                        <div className="w-4 h-4 rounded-full bg-[#D12053] text-white flex items-center justify-center">
+                          <Check className="w-2.5 h-2.5 stroke-[3]" />
+                        </div>
+                      )}
                     </div>
-                    <span className="text-[11px] font-mono text-black font-semibold">01700-000000</span>
+                    <span className="text-[11px] font-mono font-bold text-neutral-800 block">
+                      {bkashWalletNumber.slice(0, 5)}-{bkashWalletNumber.slice(5)}
+                    </span>
+                    <span className="text-[9px] text-neutral-400 font-medium block mt-0.5">Send Money (Personal)</span>
                   </button>
 
-                  {/* Nagad Button */}
+                  {/* Nagad */}
                   <button
                     type="button"
                     onClick={() => setSubPaymentChannel('nagad')}
-                    className={`p-3 rounded-xl border flex items-center justify-between text-xs font-bold transition-all cursor-pointer ${
+                    className={`p-3 rounded-2xl border text-left transition-all cursor-pointer relative ${
                       subPaymentChannel === 'nagad'
-                        ? 'border-2 border-black bg-white shadow-xs'
-                        : 'border-neutral-300 bg-neutral-100 hover:border-black text-black'
+                        ? 'border-[#F7931E] bg-[#F7931E]/[0.05] ring-2 ring-[#F7931E]/30 shadow-2xs'
+                        : 'border-neutral-200 bg-white hover:border-neutral-300'
                     }`}
                   >
-                    <div className="flex items-center gap-2">
-                      <span className="w-5 h-5 rounded-md bg-[#f7941d] text-white flex items-center justify-center text-[10px] font-bold shrink-0">
-                        N
-                      </span>
-                      <span className="text-black font-bold">Nagad</span>
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center gap-2">
+                        <span className="w-5 h-5 rounded-md bg-[#F7931E] text-white font-bold text-[10px] flex items-center justify-center shrink-0">
+                          N
+                        </span>
+                        <span className="font-bold text-xs text-neutral-900">Nagad</span>
+                      </div>
+                      {subPaymentChannel === 'nagad' && (
+                        <div className="w-4 h-4 rounded-full bg-[#F7931E] text-white flex items-center justify-center">
+                          <Check className="w-2.5 h-2.5 stroke-[3]" />
+                        </div>
+                      )}
                     </div>
-                    <span className="text-[11px] font-mono text-black font-semibold">01700-000000</span>
+                    <span className="text-[11px] font-mono font-bold text-neutral-800 block">
+                      {nagadWalletNumber.slice(0, 5)}-{nagadWalletNumber.slice(5)}
+                    </span>
+                    <span className="text-[9px] text-neutral-400 font-medium block mt-0.5">Send Money (Personal)</span>
                   </button>
                 </div>
               </div>
 
-              {/* Amount to Send & 1-Click Copy Number (Matching User's Screenshot) */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 bg-white rounded-xl border border-neutral-300">
-                <div>
-                  <span className="text-[10px] uppercase font-bold text-black tracking-wider block">
-                    Payable Amount Now:
-                  </span>
-                  <span className="font-sans text-base sm:text-lg font-extrabold text-black tabular-nums">
-                    ৳{payableNow.toLocaleString()}
-                  </span>
-                </div>
+              {/* Transfer Details & Copy Box */}
+              <div className="p-3.5 rounded-2xl bg-neutral-50 border border-neutral-200 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-neutral-500 tracking-wider block">
+                      {subPaymentChannel === 'bkash' ? 'bKash' : 'Nagad'} Number:
+                    </span>
+                    <span className="font-mono text-base font-black text-neutral-950 tracking-wider">
+                      {formattedActiveNumber}
+                    </span>
+                  </div>
 
-                <button
-                  type="button"
-                  onClick={() => handleCopyNumber('01700000000', `modal-${subPaymentChannel}`)}
-                  className="px-3.5 py-2 rounded-xl bg-black text-white hover:bg-neutral-800 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer shrink-0"
-                >
-                  {copiedNumber === `modal-${subPaymentChannel}` ? (
-                    <>
-                      <Check className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>Copied!</span>
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="w-3.5 h-3.5 text-white" />
-                      <span>Copy 01700-000000</span>
-                    </>
-                  )}
-                </button>
-              </div>
-
-              {/* TrxID Input (Matching User's Screenshot) */}
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="font-bold text-black uppercase text-[11px] tracking-wider">
-                    Transaction ID / TrxID (From bKash / Nagad SMS) *
-                  </label>
                   <button
                     type="button"
-                    onClick={handleSimulateSandboxSuccess}
-                    className="text-[10px] text-[#800000] hover:underline font-bold cursor-pointer"
+                    onClick={() => handleCopyNumber(activeChannelNumber, `modal-${subPaymentChannel}`)}
+                    className="px-3.5 py-1.5 rounded-xl bg-neutral-900 hover:bg-black text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer active:scale-95"
                   >
-                    + Autofill Test TrxID
+                    {copiedNumber === `modal-${subPaymentChannel}` ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-emerald-400 stroke-[3]" />
+                        <span>Copied!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5 text-neutral-300" />
+                        <span>Copy Number</span>
+                      </>
+                    )}
                   </button>
                 </div>
+
+                <div className="text-[11px] text-neutral-600 space-y-1 pt-2 border-t border-neutral-200 leading-relaxed font-normal">
+                  <p>১. আপনার {subPaymentChannel === 'bkash' ? 'বিকাশ' : 'নগদ'} অ্যাপ থেকে ওপরের নম্বরে <strong>৳{payableNow.toLocaleString()}</strong> Send Money করুন।</p>
+                  <p>২. ট্রানজেকশনের পর পাওয়া TrxID টি নিচের ঘরে লিখে কনফার্ম করুন।</p>
+                </div>
+              </div>
+
+              {/* TrxID Input */}
+              <div className="space-y-1.5">
+                <label className="font-bold text-neutral-800 uppercase text-[11px] tracking-wider block">
+                  Transaction ID / TrxID (From SMS) *
+                </label>
                 <input
                   type="text"
                   required
                   placeholder="e.g. 9K2837L10"
                   value={modalTrxId}
-                  onChange={(e) => setModalTrxId(e.target.value)}
-                  className="w-full p-3 border border-neutral-400 rounded-xl font-mono text-sm font-bold uppercase tracking-wider focus:border-black focus:outline-hidden bg-white text-black placeholder:text-neutral-500"
+                  onChange={(e) => setModalTrxId(e.target.value.toUpperCase())}
+                  className="w-full p-3 border border-neutral-300 rounded-xl font-mono text-sm font-bold text-center tracking-widest focus:border-[#800000] focus:ring-1 focus:ring-[#800000] focus:outline-hidden bg-white text-neutral-900 placeholder:text-neutral-400 uppercase shadow-2xs"
                 />
               </div>
 
               {/* Action Buttons */}
-              <div className="pt-2 space-y-2 border-t border-neutral-200">
+              <div className="pt-2 space-y-2">
                 <button
                   type="button"
                   onClick={handleVerifyModalPayment}
                   disabled={isVerifyingPayment}
-                  className="w-full bg-[#800000] hover:bg-[#600000] text-white py-3.5 rounded-xl font-bold text-xs tracking-wider uppercase transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:bg-neutral-300"
+                  className="w-full bg-[#800000] hover:bg-[#600000] text-white py-3.5 rounded-xl font-bold text-xs sm:text-sm tracking-wider uppercase transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:bg-neutral-300 active:scale-[0.99]"
                 >
                   {isVerifyingPayment ? (
                     <>
@@ -929,16 +957,19 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                       <span>Verifying Payment...</span>
                     </>
                   ) : (
-                    <span>Verify & Confirm Booking</span>
+                    <>
+                      <ShieldCheck className="w-4 h-4 text-white" />
+                      <span>Confirm Booking (৳{payableNow.toLocaleString()})</span>
+                    </>
                   )}
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setPendingOrder(null)}
-                  className="w-full py-2.5 text-xs text-black hover:text-neutral-800 font-bold cursor-pointer"
+                  className="w-full py-2 text-xs text-neutral-500 hover:text-neutral-900 font-semibold cursor-pointer text-center"
                 >
-                  Cancel / Edit Booking Info
+                  Cancel / Return to Checkout
                 </button>
               </div>
             </div>

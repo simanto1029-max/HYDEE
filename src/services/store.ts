@@ -98,12 +98,24 @@ class StoreService {
   private promoPopup: PromotionalPopup = INITIAL_PROMO_POPUP;
   private auditLogs: AuditLog[] = [];
   private listeners: Set<() => void> = new Set();
+  public isSyncing: boolean = false;
+  public hasInitialSyncCompleted: boolean = false;
 
   constructor() {
     this.loadFromStorage();
     if (isSupabaseConfigured && supabase) {
       this.syncFromSupabase();
+    } else {
+      this.hasInitialSyncCompleted = true;
     }
+  }
+
+  public getIsSyncing(): boolean {
+    return this.isSyncing;
+  }
+
+  public getHasInitialSyncCompleted(): boolean {
+    return this.hasInitialSyncCompleted;
   }
 
   private loadFromStorage() {
@@ -130,7 +142,25 @@ class StoreService {
 
       const storedProds = localStorage.getItem(STORAGE_KEYS.PRODUCTS);
       const rawProds: Product[] = storedProds ? JSON.parse(storedProds) : INITIAL_PRODUCTS;
-      this.products = rawProds.filter((p) => !this.deletedProductIds.has(p.id));
+      this.products = rawProds
+        .filter((p) => !this.deletedProductIds.has(p.id))
+        .map((p) => {
+          // Normalize legacy 16500 demo placeholder so it never flashes on load
+          if (p.price === 16500) {
+            return {
+              ...p,
+              price: 1799,
+              compareAtPrice: 2500,
+              variants: (p.variants || []).map((v) => ({ ...v, price: 1799, compareAtPrice: 2500 })),
+              bundleTiers: [
+                { quantity: 1, label: 'Buy 1', subtitle: 'Standard Edition', price: 1799, freeShipping: false },
+                { quantity: 2, label: 'Buy 2', subtitle: 'Save 10% Extra', price: 3238, badge: 'Most Popular', freeShipping: false },
+                { quantity: 3, label: 'Buy 3', subtitle: 'Save 20% Extra + Free Delivery', price: 4318, freeShipping: true },
+              ],
+            };
+          }
+          return p;
+        });
 
       const storedCats = localStorage.getItem(STORAGE_KEYS.CATEGORIES);
       const rawCats: Category[] = storedCats ? JSON.parse(storedCats) : INITIAL_CATEGORIES;
@@ -177,6 +207,13 @@ class StoreService {
         this.settings.tangailLocation = 'Tangail, Dhaka Division, Bangladesh';
         this.settings.address = 'Tangail, Dhaka Division, Bangladesh';
       }
+      // Official WhatsApp & Wallet Numbers
+      if (!this.settings.whatsappNumber || this.settings.whatsappNumber.includes('1711') || this.settings.whatsappNumber.includes('0000')) {
+        this.settings.whatsappNumber = '8801601705804';
+      }
+      this.settings.bkashNumber = this.settings.bkashNumber || '01601705804';
+      this.settings.nagadNumber = this.settings.nagadNumber || '01601705804';
+      this.settings.hotlinePhone = '01601-705804';
       localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(this.settings));
 
       const storedPromo = localStorage.getItem(STORAGE_KEYS.PROMO);
@@ -233,7 +270,12 @@ class StoreService {
   }
 
   async syncFromSupabase() {
-    if (!isSupabaseConfigured || !supabase) return;
+    if (!isSupabaseConfigured || !supabase) {
+      this.hasInitialSyncCompleted = true;
+      return;
+    }
+    this.isSyncing = true;
+    this.notify();
     try {
       // 1. Fetch Categories
       const { data: catData, error: catError } = await supabase
@@ -260,14 +302,18 @@ class StoreService {
 
       if (!prodError && prodData && prodData.length > 0) {
         this.products = prodData.map((p: any) => {
-          const variantsList = Array.isArray(p.variants) && p.variants.length > 0 ? p.variants : [];
+          const existing = this.products.find((ep) => ep.id === p.id || ep.slug === p.slug);
+          const variantsList = Array.isArray(p.variants) && p.variants.length > 0 ? p.variants : (existing?.variants || []);
           const realSizes = Array.from(
             new Set(variantsList.map((v: any) => v.size).filter((s: any) => s && s !== 'Free Size' && s !== 'Standard'))
           );
-          const hasSizes = p.has_sizes !== undefined ? Boolean(p.has_sizes) : (realSizes.length > 0);
+          const hasSizes = p.has_sizes !== undefined ? Boolean(p.has_sizes) : (existing?.hasSizes ?? (realSizes.length > 0));
 
-          let colors = p.color_options;
-          if (!colors || !Array.isArray(colors) || colors.length === 0) {
+          let colors = p.color_options && Array.isArray(p.color_options) && p.color_options.length > 0
+            ? p.color_options
+            : (existing?.colorOptions && existing.colorOptions.length > 0 ? existing.colorOptions : null);
+
+          if (!colors || colors.length === 0) {
             const uniqueColNames = Array.from(new Set(variantsList.map((v: any) => v.color).filter(Boolean)));
             if (uniqueColNames.length > 0) {
               colors = uniqueColNames.map((cName: any) => {
@@ -280,6 +326,21 @@ class StoreService {
               });
             }
           }
+
+          // Preserve bundle tiers & free delivery options
+          let resolvedBundleTiers = p.bundle_tiers && Array.isArray(p.bundle_tiers) && p.bundle_tiers.length > 0
+            ? p.bundle_tiers
+            : (existing?.bundleTiers && existing.bundleTiers.length > 0 ? existing.bundleTiers : null);
+
+          if (!resolvedBundleTiers || resolvedBundleTiers.length === 0) {
+            resolvedBundleTiers = [
+              { quantity: 1, label: 'Buy 1', subtitle: 'Standard Edition', price: Number(p.price), freeShipping: false },
+              { quantity: 2, label: 'Buy 2', subtitle: 'Save 10% Extra', badge: 'Most Popular', price: Math.round(Number(p.price) * 2 * 0.9), freeShipping: false },
+              { quantity: 3, label: 'Buy 3', subtitle: 'Save 20% Extra + Free Delivery', price: Math.round(Number(p.price) * 3 * 0.8), freeShipping: true },
+            ];
+          }
+
+          const resolvedHeadline = p.bundle_headline || existing?.bundleHeadline || '50% OFF TODAY ONLY';
 
           return {
             id: p.id,
@@ -304,10 +365,10 @@ class StoreService {
             images: Array.isArray(p.images) && p.images.length > 0 ? p.images : ['/images/editorial-glory-red.jpg'],
             variants: variantsList,
             hasSizes,
-            customSizes: p.custom_sizes || (hasSizes ? realSizes : []),
+            customSizes: p.custom_sizes || existing?.customSizes || (hasSizes ? realSizes : []),
             colorOptions: colors,
-            bundleTiers: p.bundle_tiers || undefined,
-            bundleHeadline: p.bundle_headline || undefined,
+            bundleTiers: resolvedBundleTiers,
+            bundleHeadline: resolvedHeadline,
             tags: Array.isArray(p.tags) ? p.tags : [],
             isBestSeller: Boolean(p.is_best_seller),
             isFeatured: Boolean(p.is_featured),
@@ -374,6 +435,10 @@ class StoreService {
       this.persist();
     } catch (err) {
       console.warn('Supabase initial sync notice:', err);
+    } finally {
+      this.isSyncing = false;
+      this.hasInitialSyncCompleted = true;
+      this.notify();
     }
   }
 
