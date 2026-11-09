@@ -698,7 +698,7 @@ export const ALL_DEMO_PRODUCTS: Product[] = [
   },
 ];
 
-export const INITIAL_PRODUCTS: Product[] = [GLORY_RED_PRODUCT];
+export const INITIAL_PRODUCTS: Product[] = [];
 
 export const INITIAL_HERO_SLIDES: HeroSlide[] = [
   {
