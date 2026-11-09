@@ -665,7 +665,7 @@ class StoreService {
           .maybeSingle();
 
         const timeoutPromise = new Promise<{ data: null; error: null }>((resolve) =>
-          setTimeout(() => resolve({ data: null, error: null }), 1200)
+          setTimeout(() => resolve({ data: null, error: null }), 15000)
         );
 
         const { data, error } = (await Promise.race([queryPromise, timeoutPromise])) as any;
