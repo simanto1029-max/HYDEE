@@ -158,7 +158,7 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
     },
   ];
 
-  const activeTiers = React.useMemo(() => {
+  const activeTiers = (() => {
     const rawTiers = (product.bundleTiers && product.bundleTiers.length > 0)
       ? product.bundleTiers
       : defaultTiers;
@@ -175,7 +175,7 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
       }
       return t;
     });
-  }, [product.bundleTiers, unitPrice]);
+  })();
 
   const currentTier = activeTiers[selectedTierIndex] || activeTiers[0];
   const tierQuantity = currentTier.quantity;
