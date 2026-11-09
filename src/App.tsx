@@ -26,22 +26,24 @@ export default function App() {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [directBuyItem, setDirectBuyItem] = useState<CartItem | null>(null);
-  const [isInitialLoading, setIsInitialLoading] = useState<boolean>(!store.getHasInitialSyncCompleted());
+  const [isInitialLoading, setIsInitialLoading] = useState<boolean>(() => {
+    return store.getProducts().length === 0 && !store.getHasInitialSyncCompleted();
+  });
 
   // Subscribe to store updates & initial sync completion
   useEffect(() => {
     const handleStoreChange = () => {
       setCartItems(store.getCart());
-      if (store.getHasInitialSyncCompleted()) {
+      if (store.getHasInitialSyncCompleted() || store.getProducts().length > 0) {
         setIsInitialLoading(false);
       }
     };
     const unsubscribe = store.subscribe(handleStoreChange);
 
-    // Failsafe timeout to smoothly dismiss loader after max 1.2s
+    // Fast failsafe timeout to dismiss loader in < 700ms
     const timeout = setTimeout(() => {
       setIsInitialLoading(false);
-    }, 1200);
+    }, 700);
 
     return () => {
       unsubscribe();
@@ -148,10 +150,11 @@ export default function App() {
 
     // 4. Product Detail Page: /products/:slug or /product/:slug
     if (currentPath.startsWith('/products/') || currentPath.startsWith('/product/')) {
-      const slug = currentPath.replace(/^\/(products|product)\//, '');
+      const rawSlug = currentPath.replace(/^\/(products|product)\//, '');
+      const cleanSlug = decodeURIComponent(rawSlug).split('?')[0].split('#')[0].replace(/\/+$/, '');
       return (
         <ProductDetailView
-          slug={slug}
+          slug={cleanSlug}
           onNavigate={navigate}
           onAddToCart={handleAddToCart}
           onBuyNow={handleBuyNow}

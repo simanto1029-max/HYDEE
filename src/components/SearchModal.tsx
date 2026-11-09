@@ -14,7 +14,14 @@ export const SearchModal: React.FC<SearchModalProps> = ({
   onSelectProduct,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const products = store.getPublishedProducts();
+  const [products, setProducts] = useState(() => store.getPublishedProducts());
+
+  useEffect(() => {
+    const unsub = store.subscribe(() => {
+      setProducts(store.getPublishedProducts());
+    });
+    return unsub;
+  }, []);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {

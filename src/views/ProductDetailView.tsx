@@ -18,7 +18,8 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
   onAddToCart,
   onBuyNow,
 }) => {
-  const product = store.getProductBySlug(slug);
+  const [product, setProduct] = useState<Product | undefined>(() => store.getProductBySlug(slug));
+  const [isLoading, setIsLoading] = useState<boolean>(!product);
 
   const [selectedVariantId, setSelectedVariantId] = useState<string>(
     product?.variants[0]?.id || ''
@@ -27,9 +28,47 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
   const [colorPreviewImage, setColorPreviewImage] = useState<string | null>(null);
   const [selectedTierIndex, setSelectedTierIndex] = useState(1); // Default to Most Popular (Buy 2)
 
+  // Resolve product instantly from cache or Supabase in < 200ms
+  useEffect(() => {
+    let isMounted = true;
+
+    const resolve = async () => {
+      const local = store.getProductBySlug(slug);
+      if (local) {
+        if (isMounted) {
+          setProduct(local);
+          setIsLoading(false);
+        }
+        return;
+      }
+
+      setIsLoading(true);
+      const fetched = await store.fetchProductBySlug(slug);
+      if (isMounted) {
+        setProduct(fetched || store.getProductBySlug(slug));
+        setIsLoading(false);
+      }
+    };
+
+    resolve();
+
+    const unsubscribe = store.subscribe(() => {
+      const updated = store.getProductBySlug(slug);
+      if (updated && isMounted) {
+        setProduct(updated);
+        setIsLoading(false);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
+  }, [slug]);
+
   useEffect(() => {
     if (product) {
-      if (product.variants.length > 0) {
+      if (product.variants.length > 0 && !selectedVariantId) {
         setSelectedVariantId(product.variants[0].id);
       }
       setSelectedImageIndex(0);
@@ -57,6 +96,16 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
       });
     }
   }, [slug, product]);
+
+  if (isLoading) {
+    return (
+      <div className="py-28 max-w-xl mx-auto px-6 text-center space-y-4">
+        <div className="w-10 h-10 border-2 border-neutral-200 border-t-[#800000] rounded-full animate-spin mx-auto" />
+        <h2 className="font-serif text-xl font-bold text-neutral-900">Loading HYDEE Piece...</h2>
+        <p className="text-xs text-neutral-400">Retrieving bespoke atelier details from collection</p>
+      </div>
+    );
+  }
 
   if (!product) {
     return (

@@ -297,87 +297,21 @@ class StoreService {
       // 2. Fetch Products
       const { data: prodData, error: prodError } = await supabase
         .from('products')
-        .select('*')
-        .eq('is_archived', false);
+        .select('*');
 
-      if (!prodError && prodData && prodData.length > 0) {
-        this.products = prodData.map((p: any) => {
-          const existing = this.products.find((ep) => ep.id === p.id || ep.slug === p.slug);
-          const variantsList = Array.isArray(p.variants) && p.variants.length > 0 ? p.variants : (existing?.variants || []);
-          const realSizes = Array.from(
-            new Set(variantsList.map((v: any) => v.size).filter((s: any) => s && s !== 'Free Size' && s !== 'Standard'))
-          );
-          const hasSizes = p.has_sizes !== undefined ? Boolean(p.has_sizes) : (existing?.hasSizes ?? (realSizes.length > 0));
+      if (prodError) {
+        console.error('Supabase products fetch error:', prodError.message, prodError.details);
+      }
 
-          let colors = p.color_options && Array.isArray(p.color_options) && p.color_options.length > 0
-            ? p.color_options
-            : (existing?.colorOptions && existing.colorOptions.length > 0 ? existing.colorOptions : null);
-
-          if (!colors || colors.length === 0) {
-            const uniqueColNames = Array.from(new Set(variantsList.map((v: any) => v.color).filter(Boolean)));
-            if (uniqueColNames.length > 0) {
-              colors = uniqueColNames.map((cName: any) => {
-                const match = variantsList.find((v: any) => v.color === cName);
-                return {
-                  name: String(cName),
-                  imageUrl: match?.colorImage || p.images?.[0] || '',
-                  colorHex: match?.colorHex || '#800000',
-                };
-              });
-            }
-          }
-
-          // Preserve bundle tiers & free delivery options
-          let resolvedBundleTiers = p.bundle_tiers && Array.isArray(p.bundle_tiers) && p.bundle_tiers.length > 0
-            ? p.bundle_tiers
-            : (existing?.bundleTiers && existing.bundleTiers.length > 0 ? existing.bundleTiers : null);
-
-          if (!resolvedBundleTiers || resolvedBundleTiers.length === 0) {
-            resolvedBundleTiers = [
-              { quantity: 1, label: 'Buy 1', subtitle: 'Standard Edition', price: Number(p.price), freeShipping: false },
-              { quantity: 2, label: 'Buy 2', subtitle: 'Save 10% Extra', badge: 'Most Popular', price: Math.round(Number(p.price) * 2 * 0.9), freeShipping: false },
-              { quantity: 3, label: 'Buy 3', subtitle: 'Save 20% Extra + Free Delivery', price: Math.round(Number(p.price) * 3 * 0.8), freeShipping: true },
-            ];
-          }
-
-          const resolvedHeadline = p.bundle_headline || existing?.bundleHeadline || '50% OFF TODAY ONLY';
-
-          return {
-            id: p.id,
-            name: p.name,
-            slug: p.slug,
-            sku: p.sku,
-            categorySlug: p.category_slug,
-            categoryName: p.category_name,
-            price: Number(p.price),
-            compareAtPrice: p.compare_at_price ? Number(p.compare_at_price) : undefined,
-            costPrice: p.cost_price ? Number(p.cost_price) : undefined,
-            stock: p.stock ?? 10,
-            description: p.description || '',
-            shortDescription: p.short_description || '',
-            specifications: {
-              fabric: p.fabric || '',
-              fit: p.fit || '',
-              care: p.care || '',
-              origin: p.origin || '',
-              craftsmanshipNotes: p.craftsmanship_notes || '',
-            },
-            images: Array.isArray(p.images) && p.images.length > 0 ? p.images : ['/images/editorial-glory-red.jpg'],
-            variants: variantsList,
-            hasSizes,
-            customSizes: p.custom_sizes || existing?.customSizes || (hasSizes ? realSizes : []),
-            colorOptions: colors,
-            bundleTiers: resolvedBundleTiers,
-            bundleHeadline: resolvedHeadline,
-            tags: Array.isArray(p.tags) ? p.tags : [],
-            isBestSeller: Boolean(p.is_best_seller),
-            isFeatured: Boolean(p.is_featured),
-            isHangerFeatured: Boolean(p.is_hanger_featured),
-            isArchived: Boolean(p.is_archived),
-            createdAt: p.created_at || new Date().toISOString(),
-            updatedAt: p.updated_at || new Date().toISOString(),
-          };
-        });
+      if (prodData && prodData.length > 0) {
+        const activeRows = prodData.filter((p: any) => p.is_archived !== true);
+        if (activeRows.length > 0) {
+          this.products = activeRows.map((p: any) => this.mapSupabaseProduct(p));
+          // Save directly to localStorage so all future reloads load in 0ms
+          try {
+            localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(this.products));
+          } catch (e) {}
+        }
       }
 
       // 3. Fetch Orders
@@ -476,8 +410,137 @@ class StoreService {
     return this.products.find((p) => p.id === id);
   }
 
+  public mapSupabaseProduct(p: any): Product {
+    const existing = this.products.find((ep) => ep.id === p.id || ep.slug === p.slug);
+    const variantsList = Array.isArray(p.variants) && p.variants.length > 0 ? p.variants : (existing?.variants || []);
+    const realSizes = Array.from(
+      new Set(variantsList.map((v: any) => v.size).filter((s: any) => s && s !== 'Free Size' && s !== 'Standard'))
+    );
+    const hasSizes = p.has_sizes !== undefined ? Boolean(p.has_sizes) : (existing?.hasSizes ?? (realSizes.length > 0));
+
+    let colors = p.color_options && Array.isArray(p.color_options) && p.color_options.length > 0
+      ? p.color_options
+      : (existing?.colorOptions && existing.colorOptions.length > 0 ? existing.colorOptions : null);
+
+    if (!colors || colors.length === 0) {
+      const uniqueColNames = Array.from(new Set(variantsList.map((v: any) => v.color).filter(Boolean)));
+      if (uniqueColNames.length > 0) {
+        colors = uniqueColNames.map((cName: any) => {
+          const match = variantsList.find((v: any) => v.color === cName);
+          return {
+            name: String(cName),
+            imageUrl: match?.colorImage || p.images?.[0] || '',
+            colorHex: match?.colorHex || '#800000',
+          };
+        });
+      }
+    }
+
+    // Preserve bundle tiers & free delivery options
+    let resolvedBundleTiers = p.bundle_tiers && Array.isArray(p.bundle_tiers) && p.bundle_tiers.length > 0
+      ? p.bundle_tiers
+      : (existing?.bundleTiers && existing.bundleTiers.length > 0 ? existing.bundleTiers : null);
+
+    if (!resolvedBundleTiers || resolvedBundleTiers.length === 0) {
+      resolvedBundleTiers = [
+        { quantity: 1, label: 'Buy 1', subtitle: 'Standard Edition', price: Number(p.price), freeShipping: false },
+        { quantity: 2, label: 'Buy 2', subtitle: 'Save 10% Extra', badge: 'Most Popular', price: Math.round(Number(p.price) * 2 * 0.9), freeShipping: false },
+        { quantity: 3, label: 'Buy 3', subtitle: 'Save 20% Extra + Free Delivery', price: Math.round(Number(p.price) * 3 * 0.8), freeShipping: true },
+      ];
+    }
+
+    const resolvedHeadline = p.bundle_headline || existing?.bundleHeadline || '50% OFF TODAY ONLY';
+
+    return {
+      id: p.id,
+      name: p.name,
+      slug: p.slug,
+      sku: p.sku || `HYD-${p.id}`,
+      categorySlug: p.category_slug || 'three-piece',
+      categoryName: p.category_name || 'Three Piece',
+      price: Number(p.price),
+      compareAtPrice: p.compare_at_price ? Number(p.compare_at_price) : undefined,
+      costPrice: p.cost_price ? Number(p.cost_price) : undefined,
+      stock: p.stock ?? 10,
+      description: p.description || '',
+      shortDescription: p.short_description || '',
+      specifications: {
+        fabric: p.fabric || '',
+        fit: p.fit || '',
+        care: p.care || '',
+        origin: p.origin || '',
+        craftsmanshipNotes: p.craftsmanship_notes || '',
+      },
+      images: Array.isArray(p.images) && p.images.length > 0 ? p.images : ['/images/editorial-glory-red.jpg'],
+      variants: variantsList,
+      hasSizes,
+      customSizes: p.custom_sizes || existing?.customSizes || (hasSizes ? realSizes : []),
+      colorOptions: colors || [],
+      bundleTiers: resolvedBundleTiers,
+      bundleHeadline: resolvedHeadline,
+      tags: Array.isArray(p.tags) ? p.tags : [],
+      isBestSeller: Boolean(p.is_best_seller),
+      isFeatured: Boolean(p.is_featured),
+      isHangerFeatured: Boolean(p.is_hanger_featured),
+      isArchived: Boolean(p.is_archived),
+      createdAt: p.created_at || new Date().toISOString(),
+      updatedAt: p.updated_at || new Date().toISOString(),
+    };
+  }
+
   getProductBySlug(slug: string): Product | undefined {
-    return this.products.find((p) => p.slug === slug);
+    if (!slug) return undefined;
+    const clean = decodeURIComponent(slug).split('?')[0].split('#')[0].trim().replace(/\/+$/, '').toLowerCase();
+    
+    // 1. Exact slug match
+    let match = this.products.find((p) => (p.slug || '').trim().toLowerCase() === clean);
+    if (match) return match;
+
+    // 2. Exact ID or SKU match
+    match = this.products.find((p) => (p.id || '').trim().toLowerCase() === clean || (p.sku || '').trim().toLowerCase() === clean);
+    if (match) return match;
+
+    // 3. Hyphen-normalized match
+    const cleanNormalized = clean.replace(/[^a-z0-9]/g, '');
+    match = this.products.find((p) => (p.slug || '').toLowerCase().replace(/[^a-z0-9]/g, '') === cleanNormalized);
+    if (match) return match;
+
+    // 4. Substring partial match
+    return this.products.find((p) => {
+      const pSlug = (p.slug || '').trim().toLowerCase();
+      return pSlug.includes(clean) || clean.includes(pSlug);
+    });
+  }
+
+  async fetchProductBySlug(slug: string): Promise<Product | undefined> {
+    const local = this.getProductBySlug(slug);
+    if (local) return local;
+
+    if (isSupabaseConfigured && supabase) {
+      const clean = decodeURIComponent(slug).split('?')[0].split('#')[0].trim().replace(/\/+$/, '');
+      try {
+        const { data, error } = await supabase
+          .from('products')
+          .select('*')
+          .or(`slug.eq.${clean},id.eq.${clean},sku.eq.${clean}`)
+          .maybeSingle();
+
+        if (!error && data) {
+          const mapped = this.mapSupabaseProduct(data);
+          const idx = this.products.findIndex((p) => p.id === mapped.id || p.slug === mapped.slug);
+          if (idx >= 0) {
+            this.products[idx] = mapped;
+          } else {
+            this.products.unshift(mapped);
+          }
+          this.persist();
+          return mapped;
+        }
+      } catch (e) {
+        console.warn('Error fetching product by slug:', e);
+      }
+    }
+    return undefined;
   }
 
   getHangerProducts(): Product[] {
