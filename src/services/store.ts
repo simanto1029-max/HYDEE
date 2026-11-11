@@ -1352,12 +1352,25 @@ class StoreService {
     );
     if (!order) return { success: false, error: 'Order not found.' };
 
-    if (order.paymentStatus === 'ADVANCE_VERIFIED') {
-      return { success: false, error: 'Advance payment for this order was already confirmed previously (duplicate prevented).' };
+    if (order.paymentStatus === 'ADVANCE_VERIFIED' || order.paymentStatus === 'FULLY_PAID') {
+      return { success: false, error: 'Payment for this order was already confirmed previously (duplicate prevented).' };
     }
 
     if (!transactionId.trim()) {
       return { success: false, error: 'Transaction ID / reference number is required.' };
+    }
+
+    // The same TrxID must never confirm two different orders
+    const trxUpper = transactionId.trim().toUpperCase();
+    const trxUsedElsewhere = this.orders.find(
+      (o) =>
+        o.id !== order.id &&
+        !o.isTestOrder &&
+        (o.transactionId || '').trim().toUpperCase() === trxUpper &&
+        (o.paymentStatus === 'FULLY_PAID' || o.paymentStatus === 'ADVANCE_VERIFIED')
+    );
+    if (trxUsedElsewhere) {
+      return { success: false, error: `This Transaction ID was already used to confirm order ${trxUsedElsewhere.orderNumber}.` };
     }
 
     // Deduct stock for non-test orders
@@ -1402,6 +1415,127 @@ class StoreService {
         : `Confirmed advance ৳${order.advanceDeliveryFee} for order ${order.orderNumber} (TrxID: ${order.transactionId})`
     );
 
+    this.persist();
+    return { success: true, order };
+  }
+
+  // Customer typed a TrxID in the payment popup. This does NOT confirm the order:
+  // it only records the reference so the admin can check it in the bKash / Nagad app.
+  submitPaymentReference(
+    orderNumber: string,
+    method: 'bkash' | 'nagad' | 'rocket' | 'card' | 'manual_deposit',
+    transactionId: string
+  ): { success: boolean; order?: Order; error?: string } {
+    const order = this.orders.find((o) => o.orderNumber.trim().toUpperCase() === (orderNumber || '').trim().toUpperCase());
+    if (!order) return { success: false, error: 'Order not found.' };
+
+    if (order.paymentStatus === 'FULLY_PAID' || order.paymentStatus === 'ADVANCE_VERIFIED') {
+      return { success: false, error: 'This order is already paid.' };
+    }
+
+    const trx = (transactionId || '').trim().toUpperCase();
+    if (!/^[A-Z0-9]{8,14}$/.test(trx) || /^(.)\1+$/.test(trx)) {
+      return {
+        success: false,
+        error: 'Invalid Transaction ID. Please copy the TrxID exactly from the bKash/Nagad SMS (8-14 letters and numbers, no spaces or dashes).'
+      };
+    }
+
+    const usedElsewhere = this.orders.find(
+      (o) => o.id !== order.id && !o.isTestOrder && (o.transactionId || '').trim().toUpperCase() === trx
+    );
+    if (usedElsewhere) {
+      return { success: false, error: 'This Transaction ID has already been used for another order. Please check the TrxID in your SMS.' };
+    }
+
+    const now = new Date().toISOString();
+    order.transactionId = trx;
+    order.advancePaymentMethod = method;
+    order.paymentStatus = 'MANUAL_REVIEW';
+    order.status = 'PENDING_ADVANCE';
+    order.updatedAt = now;
+    order.timeline.push({
+      timestamp: now,
+      status: 'PAYMENT_SUBMITTED',
+      note: `Customer submitted ${method.toUpperCase()} TrxID ${trx} for ৳${order.totalAmount.toLocaleString()}. Waiting for admin to verify in the ${method} app.`,
+      actor: 'Customer',
+    });
+    this.logAudit('Payment Reference Submitted', `Order ${order.orderNumber}: ${method.toUpperCase()} TrxID ${trx}`);
+    this.persist();
+    return { success: true, order };
+  }
+
+  // Admin checked the app and the money did NOT arrive / TrxID is wrong
+  rejectSubmittedPayment(orderNumber: string, actor: string = 'Admin Staff'): { success: boolean; error?: string } {
+    const order = this.getOrderByNumber(orderNumber);
+    if (!order) return { success: false, error: 'Order not found.' };
+    if (order.paymentStatus === 'FULLY_PAID' || order.paymentStatus === 'ADVANCE_VERIFIED') {
+      return { success: false, error: 'This payment is already confirmed.' };
+    }
+    const now = new Date().toISOString();
+    const oldTrx = order.transactionId;
+    order.transactionId = undefined;
+    order.advancePaymentMethod = undefined;
+    order.paymentStatus = 'UNPAID';
+    order.status = 'PENDING_ADVANCE';
+    order.updatedAt = now;
+    order.timeline.push({
+      timestamp: now,
+      status: 'PAYMENT_REJECTED',
+      note: `Payment reference ${oldTrx || ''} was rejected: money not received. Order moved back to Incomplete Leads.`,
+      actor,
+    });
+    this.logAudit('Payment Rejected', `Order ${order.orderNumber}: TrxID ${oldTrx || ''} rejected`);
+    this.persist();
+    return { success: true };
+  }
+
+  // Customer abandoned prepayment but agrees to Cash on Delivery -> becomes a real confirmed COD order
+  convertLeadToCod(orderNumber: string, actor: string = 'Admin Staff'): { success: boolean; order?: Order; error?: string } {
+    const order = this.getOrderByNumber(orderNumber);
+    if (!order) return { success: false, error: 'Order not found.' };
+    if (order.status !== 'PENDING_ADVANCE') return { success: false, error: 'Only incomplete leads can be converted.' };
+    if (order.paymentStatus === 'FULLY_PAID' || order.paymentStatus === 'ADVANCE_VERIFIED') {
+      return { success: false, error: 'This order is already paid.' };
+    }
+
+    // Stock must still be available
+    if (!order.isTestOrder) {
+      for (const item of order.items) {
+        const product = this.getProductById(item.productId);
+        const variant = product?.variants.find((v) => v.id === item.variantId);
+        const available = variant ? variant.stock ?? product!.stock : product?.stock ?? 0;
+        if (!product || available < item.quantity) {
+          return { success: false, error: `"${item.productName}" does not have enough stock any more.` };
+        }
+      }
+      for (const item of order.items) {
+        const product = this.getProductById(item.productId);
+        if (!product) continue;
+        const vIdx = product.variants.findIndex((v) => v.id === item.variantId);
+        if (vIdx >= 0) {
+          product.variants[vIdx].stock = Math.max(0, (product.variants[vIdx].stock || 0) - item.quantity);
+        }
+        product.stock = Math.max(0, (product.stock || 0) - item.quantity);
+      }
+    }
+
+    const now = new Date().toISOString();
+    order.paymentType = 'advance_cod';
+    order.isFullPayment = false;
+    order.remainingCodAmount = order.totalAmount;
+    order.transactionId = undefined;
+    order.advancePaymentMethod = undefined;
+    order.paymentStatus = 'UNPAID';
+    order.status = 'CONFIRMED';
+    order.updatedAt = now;
+    order.timeline.push({
+      timestamp: now,
+      status: 'CONVERTED_TO_COD',
+      note: `Lead converted to Cash on Delivery. ৳${order.totalAmount.toLocaleString()} will be collected on delivery.`,
+      actor,
+    });
+    this.logAudit('Lead Converted To COD', `Order ${order.orderNumber} confirmed as Cash on Delivery`);
     this.persist();
     return { success: true, order };
   }
