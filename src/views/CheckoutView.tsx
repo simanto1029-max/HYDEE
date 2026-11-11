@@ -245,31 +245,26 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
     setPaymentError(null);
   };
 
-  // Verify payment inside modal
+  // Customer submits the TrxID. The order is only CONFIRMED after the admin verifies the money in the bKash/Nagad app.
   const handleVerifyModalPayment = () => {
     if (!pendingOrder) return;
     setPaymentError(null);
 
     const cleanTrx = modalTrxId.trim().toUpperCase();
-    if (!cleanTrx || cleanTrx.length < 6) {
-      setPaymentError('Please enter a valid Transaction ID (at least 6 characters).');
+    if (!/^[A-Z0-9]{8,14}$/.test(cleanTrx)) {
+      setPaymentError('Please enter the exact Transaction ID from your bKash/Nagad SMS (8-14 letters and numbers, no spaces or dashes).');
       return;
     }
 
     setIsVerifyingPayment(true);
 
     setTimeout(() => {
-      const verifyResult = store.verifyAdvancePayment(
-        pendingOrder.orderNumber,
-        subPaymentChannel,
-        cleanTrx,
-        `${subPaymentChannel.toUpperCase()} Gateway Callback (Verified)`
-      );
+      const result = store.submitPaymentReference(pendingOrder.orderNumber, subPaymentChannel, cleanTrx);
 
       setIsVerifyingPayment(false);
 
-      if (!verifyResult.success || !verifyResult.order) {
-        setPaymentError(verifyResult.error || 'Payment verification failed.');
+      if (!result.success || !result.order) {
+        setPaymentError(result.error || 'Could not submit your payment reference. Please try again.');
         return;
       }
 
@@ -277,15 +272,9 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
         onClearCart();
       }
 
-      onOrderConfirmed(verifyResult.order);
-      onNavigate(`/thank-you?order=${verifyResult.order.orderNumber}`);
-    }, 900);
-  };
-
-  // Test sandbox TRX fill
-  const handleSimulateSandboxSuccess = () => {
-    const randomTrx = `TRX-${subPaymentChannel.toUpperCase()}-${Math.floor(100000 + Math.random() * 900000)}`;
-    setModalTrxId(randomTrx);
+      onOrderConfirmed(result.order);
+      onNavigate(`/thank-you?order=${result.order.orderNumber}`);
+    }, 600);
   };
 
   if (checkoutItems.length === 0 && !pendingOrder) {
@@ -954,12 +943,12 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                   {isVerifyingPayment ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Verifying Payment...</span>
+                      <span>Submitting...</span>
                     </>
                   ) : (
                     <>
                       <ShieldCheck className="w-4 h-4 text-white" />
-                      <span>Confirm Booking (৳{payableNow.toLocaleString()})</span>
+                      <span>Submit Payment (৳{payableNow.toLocaleString()})</span>
                     </>
                   )}
                 </button>
