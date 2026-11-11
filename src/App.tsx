@@ -53,15 +53,22 @@ export default function App() {
 
   // Initialize Meta Pixel & URL listener
   useEffect(() => {
-    const settings = store.getSettings();
-    metaPixel.init(settings.metaPixelId);
+    metaPixel.init(store.getSettings().metaPixelId);
+
+    // The Pixel ID comes from Supabase a moment after the page opens: start the Pixel as soon as it arrives
+    const unsubscribePixel = store.subscribe(() => {
+      metaPixel.init(store.getSettings().metaPixelId);
+    });
 
     const handlePopState = () => {
       setCurrentPath(window.location.pathname || '/');
     };
 
     window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
+    return () => {
+      unsubscribePixel();
+      window.removeEventListener('popstate', handlePopState);
+    };
   }, []);
 
   // Track PageView on route transition
