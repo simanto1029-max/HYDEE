@@ -8,6 +8,7 @@ import {
   AlertTriangle,
   Banknote,
   PackageCheck,
+  Clock,
 } from 'lucide-react';
 import { store } from '../services/store';
 import { metaPixel } from '../services/metaPixel';
@@ -60,6 +61,33 @@ export const ThankYouView: React.FC<ThankYouViewProps> = ({ orderNumber, onNavig
         >
           Return to HYDEE
         </button>
+      </div>
+    );
+  }
+
+  // Prepayment submitted: waiting for the shop to check the money in the bKash/Nagad app
+  if (order.isFullPayment && order.paymentStatus === 'MANUAL_REVIEW') {
+    return (
+      <div className="py-20 max-w-lg mx-auto px-6 text-center space-y-4 font-sans">
+        <div className="w-16 h-16 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto">
+          <Clock className="w-8 h-8" />
+        </div>
+        <h2 className="font-serif text-2xl font-bold text-neutral-950">
+          Payment Received for Verification
+        </h2>
+        <p className="text-xs text-neutral-600 leading-relaxed">
+          Thank you! Order <strong>#{order.orderNumber}</strong> (<strong>৳{order.totalAmount.toLocaleString()}</strong>) is saved.
+          We are checking your {String(order.advancePaymentMethod || '').toUpperCase()} payment (TrxID <strong>{order.transactionId}</strong>)
+          and will confirm your order shortly. We may call you on <strong>{order.customerPhone}</strong>.
+        </p>
+        <div className="pt-4 flex flex-col sm:flex-row justify-center gap-3">
+          <button
+            onClick={() => onNavigate('/')}
+            className="bg-[#800000] text-white text-xs font-semibold px-6 py-3.5 rounded-full uppercase cursor-pointer"
+          >
+            Return Home
+          </button>
+        </div>
       </div>
     );
   }
