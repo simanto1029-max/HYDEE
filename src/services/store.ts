@@ -360,6 +360,20 @@ class StoreService {
     this.isSyncing = true;
     this.notify();
     try {
+      // 0. Fetch Site Settings first (Meta Pixel ID, contact info) so they are known before anything else loads
+      try {
+        const { data: settingsData, error: settingsError } = await supabase
+          .from('site_settings')
+          .select('*')
+          .eq('id', 'global')
+          .maybeSingle();
+
+        if (!settingsError && settingsData && settingsData.data) {
+          this.settings = { ...this.settings, ...settingsData.data };
+        }
+      } catch (err) {}
+      this.notify();
+
       // 1. Fetch Categories
       const { data: catData, error: catError } = await supabase
         .from('categories')
@@ -392,6 +406,7 @@ class StoreService {
           .filter((r: any) => r.is_archived !== true)
           .map((r: any) => r.id as string);
 
+        const previousProducts: Product[] = [...this.products];
         const loaded: Product[] = [];
         const BATCH_SIZE = 2;
         let anyBatchFailed = false;
@@ -410,7 +425,8 @@ class StoreService {
           }
 
           (rows || []).forEach((p: any) => {
-            loaded.push(this.normalizeProductPrices(this.mapSupabaseProduct(p)));
+            const prev = previousProducts.find((ep) => ep.id === p.id || ep.slug === p.slug);
+            loaded.push(this.normalizeProductPrices(this.mapSupabaseProduct(p, prev)));
           });
 
           // Show what we have so far right away (progressive loading)
@@ -467,19 +483,6 @@ class StoreService {
         }));
       }
 
-      // 4. Fetch Site Settings
-      try {
-        const { data: settingsData, error: settingsError } = await supabase
-          .from('site_settings')
-          .select('*')
-          .eq('id', 'global')
-          .maybeSingle();
-
-        if (!settingsError && settingsData && settingsData.data) {
-          this.settings = { ...this.settings, ...settingsData.data };
-        }
-      } catch (err) {}
-
       this.persist();
     } catch (err) {
       console.warn('Supabase initial sync notice:', err);
@@ -524,13 +527,13 @@ class StoreService {
     return this.products.find((p) => p.id === id);
   }
 
-  public mapSupabaseProduct(p: any): Product {
-    const existing = this.products.find((ep) => ep.id === p.id || ep.slug === p.slug);
+  public mapSupabaseProduct(p: any, existingOverride?: Product): Product {
+    const existing = existingOverride ?? this.products.find((ep) => ep.id === p.id || ep.slug === p.slug);
     const variantsList = Array.isArray(p.variants) && p.variants.length > 0 ? p.variants : (existing?.variants || []);
     const realSizes = Array.from(
       new Set(variantsList.map((v: any) => v.size).filter((s: any) => s && s !== 'Free Size' && s !== 'Standard'))
     );
-    const hasSizes = p.has_sizes !== undefined ? Boolean(p.has_sizes) : (existing?.hasSizes ?? (realSizes.length > 0));
+    const hasSizes = p.has_sizes !== undefined && p.has_sizes !== null ? Boolean(p.has_sizes) : (existing?.hasSizes ?? (realSizes.length > 0));
 
     let colors = p.color_options && Array.isArray(p.color_options) && p.color_options.length > 0
       ? p.color_options
@@ -800,7 +803,7 @@ class StoreService {
     this.persist();
 
     if (isSupabaseConfigured && supabase) {
-      supabase.from('products').upsert({
+      const basePayload: Record<string, any> = {
         id: saved.id,
         name: saved.name,
         slug: saved.slug,
@@ -825,9 +828,34 @@ class StoreService {
         is_featured: saved.isFeatured,
         is_hanger_featured: saved.isHangerFeatured,
         is_archived: saved.isArchived,
-      }).then(({ error }) => {
-        if (error) {
-          console.error('Supabase product sync error:', error.message, error.details);
+      };
+
+      // Bundle offers (Buy 1 / Buy 2 / Buy 3 prices, free delivery ticks), sizes and colors.
+      // These need the extra columns from supabase/HYDEE_ADD_BUNDLE_COLUMNS.sql
+      const fullPayload: Record<string, any> = {
+        ...basePayload,
+        bundle_tiers: saved.bundleTiers && saved.bundleTiers.length > 0 ? saved.bundleTiers : null,
+        bundle_headline: saved.bundleHeadline || null,
+        custom_sizes: saved.customSizes && saved.customSizes.length > 0 ? saved.customSizes : null,
+        has_sizes: saved.hasSizes ?? null,
+        color_options: saved.colorOptions && saved.colorOptions.length > 0 ? saved.colorOptions : null,
+      };
+
+      supabase.from('products').upsert(fullPayload).then(async ({ error }) => {
+        if (!error) return;
+        console.error('Supabase product sync error:', error.message, error.details);
+
+        // Extra columns missing in Supabase? Still save the product itself, and warn loudly.
+        if (/column|schema cache|PGRST204/i.test(`${error.message} ${(error as any).code || ''}`)) {
+          const retry = await supabase!.from('products').upsert(basePayload);
+          if (retry.error) {
+            console.error('Supabase product sync error (retry):', retry.error.message, retry.error.details);
+          } else {
+            console.warn(
+              '[HYDEE] Product saved, but Buy 2 / Buy 3 prices and free-delivery options could NOT be saved. ' +
+                'Run supabase/HYDEE_ADD_BUNDLE_COLUMNS.sql in the Supabase SQL Editor.'
+            );
+          }
         }
       });
     }
