@@ -183,6 +183,9 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
   const effectiveUnitPrice = Math.round(tierTotalPrice / tierQuantity);
 
   const isTierFreeShipping = (t: BundleTier) => {
+    // The admin's Free Delivery tick is the single source of truth (so Buy 3 can also be switched off)
+    if (typeof t.freeShipping === 'boolean') return t.freeShipping;
+    // Very old products without the tick: keep the previous guessing behaviour
     return Boolean(
       t.freeShipping ||
       t.subtitle?.toLowerCase().includes('free delivery') ||
