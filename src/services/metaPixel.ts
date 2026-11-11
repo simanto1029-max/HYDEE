@@ -11,11 +11,17 @@ export interface PixelEventPayload {
 class MetaPixelService {
   private eventsLog: PixelEventPayload[] = [];
   private firedPurchases = new Set<string>(); // Order-based deduplication
+  private initializedId: string | null = null;
+  private pending: { eventName: string; data?: Record<string, any>; eventId: string }[] = [];
 
+  // Safe to call many times (page start, after settings arrive from Supabase, after admin saves).
   init(pixelId?: string) {
     if (typeof window === 'undefined') return;
 
-    if (pixelId && !(window as any).fbq) {
+    const id = String(pixelId || '').replace(/\D/g, '');
+    if (!id || this.initializedId === id) return;
+
+    if (!(window as any).fbq) {
       /* eslint-disable */
       (function(f: any, b: any, e: any, v: any, n?: any, t?: any, s?: any) {
         if (f.fbq) return;
@@ -35,8 +41,14 @@ class MetaPixelService {
       })(window, document, 'script', 'https://connect.facebook.net/en_US/fbevents.js');
       /* eslint-enable */
 
-      (window as any).fbq('init', pixelId);
     }
+
+    (window as any).fbq('init', id);
+    this.initializedId = id;
+
+    // Send everything that happened before the Pixel ID was known (e.g. the first PageView)
+    const queued = this.pending.splice(0, this.pending.length);
+    queued.forEach((e) => (window as any).fbq('track', e.eventName, e.data, { eventID: e.eventId }));
   }
 
   track(eventName: PixelEventPayload['eventName'], data?: Record<string, any>, customEventId?: string) {
@@ -54,9 +66,11 @@ class MetaPixelService {
     this.eventsLog.unshift(logEntry);
     if (this.eventsLog.length > 50) this.eventsLog.pop();
 
-    // Call browser fbq if available
-    if (typeof window !== 'undefined' && (window as any).fbq) {
+    // Call browser fbq if the Pixel is ready; otherwise keep the event until the Pixel ID arrives
+    if (typeof window !== 'undefined' && (window as any).fbq && this.initializedId) {
       (window as any).fbq('track', eventName, data, { eventID: eventId });
+    } else if (this.pending.length < 30) {
+      this.pending.push({ eventName, data, eventId });
     }
 
     // Dispatch custom event for admin testing visualizer
