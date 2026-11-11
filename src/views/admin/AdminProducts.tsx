@@ -24,6 +24,12 @@ interface AdminProductsProps {
   onNavigateToProduct: (slug: string) => void;
 }
 
+// Default text under "Buy 1 / Buy 2 / Buy 3". The admin can replace it with any custom text per product.
+const autoTierSubtitle = (tierIndex: number, freeDelivery: boolean): string => {
+  const base = ['Standard Edition', 'Save 10% Extra', 'Save 20% Extra'][tierIndex] || '';
+  return freeDelivery ? `${base} + Free Delivery` : base;
+};
+
 export const AdminProducts: React.FC<AdminProductsProps> = ({ onNavigateToProduct }) => {
   const [products, setProducts] = useState<Product[]>(store.getProducts());
   const [categories, setCategories] = useState<Category[]>(store.getCategories());
@@ -95,6 +101,10 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ onNavigateToProduc
   const [formTier2FreeShipping, setFormTier2FreeShipping] = useState<boolean>(false);
   const [formTier3Price, setFormTier3Price] = useState<number>(0);
   const [formTier3FreeShipping, setFormTier3FreeShipping] = useState<boolean>(true);
+  // Custom text under Buy 1/2/3. Empty = use the automatic default text
+  const [formTier1Subtitle, setFormTier1Subtitle] = useState('');
+  const [formTier2Subtitle, setFormTier2Subtitle] = useState('');
+  const [formTier3Subtitle, setFormTier3Subtitle] = useState('');
 
   // Size Options (Optional & Customizable per product)
   const [formHasSizes, setFormHasSizes] = useState<boolean>(true);
@@ -252,6 +262,9 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ onNavigateToProduc
     setFormTier2FreeShipping(false);
     setFormTier3Price(4318);
     setFormTier3FreeShipping(true);
+    setFormTier1Subtitle('');
+    setFormTier2Subtitle('');
+    setFormTier3Subtitle('');
     setIsModalOpen(true);
   };
 
@@ -322,6 +335,15 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ onNavigateToProduc
     setFormTier2FreeShipping(tiers[1]?.freeShipping ?? false);
     setFormTier3Price(tiers[2]?.price ?? Math.round(p.price * 3 * 0.8));
     setFormTier3FreeShipping(tiers[2]?.freeShipping ?? true);
+    // Show a custom text only if the admin really wrote one; the automatic default stays empty (placeholder shows it)
+    const customSubtitleOf = (i: number): string => {
+      const sub = (tiers[i]?.subtitle || '').trim();
+      if (!sub) return '';
+      return sub === autoTierSubtitle(i, true) || sub === autoTierSubtitle(i, false) ? '' : sub;
+    };
+    setFormTier1Subtitle(customSubtitleOf(0));
+    setFormTier2Subtitle(customSubtitleOf(1));
+    setFormTier3Subtitle(customSubtitleOf(2));
 
     setIsModalOpen(true);
   };
@@ -346,14 +368,14 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ onNavigateToProduc
       {
         quantity: 1,
         label: 'Buy 1',
-        subtitle: formTier1FreeShipping ? 'Standard Edition + Free Delivery' : 'Standard Edition',
+        subtitle: formTier1Subtitle.trim() || autoTierSubtitle(0, formTier1FreeShipping),
         price: Number(formTier1Price || formPrice),
         freeShipping: formTier1FreeShipping,
       },
       {
         quantity: 2,
         label: 'Buy 2',
-        subtitle: formTier2FreeShipping ? 'Save 10% Extra + Free Delivery' : 'Save 10% Extra',
+        subtitle: formTier2Subtitle.trim() || autoTierSubtitle(1, formTier2FreeShipping),
         badge: formTier2Badge || undefined,
         price: Number(formTier2Price || Math.round(formPrice * 2 * 0.9)),
         freeShipping: formTier2FreeShipping,
@@ -361,7 +383,7 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ onNavigateToProduc
       {
         quantity: 3,
         label: 'Buy 3',
-        subtitle: formTier3FreeShipping ? 'Save 20% Extra + Free Delivery' : 'Save 20% Extra',
+        subtitle: formTier3Subtitle.trim() || autoTierSubtitle(2, formTier3FreeShipping),
         price: Number(formTier3Price || Math.round(formPrice * 3 * 0.8)),
         freeShipping: formTier3FreeShipping,
       },
@@ -1033,6 +1055,14 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ onNavigateToProduc
                       onChange={(e) => setFormTier1Price(Number(e.target.value))}
                       className="w-full p-2 border border-neutral-200 rounded-lg text-xs font-bold"
                     />
+                    <label className="block text-[10px] text-neutral-500">Text under "Buy 1" (leave empty for default)</label>
+                    <input
+                      type="text"
+                      value={formTier1Subtitle}
+                      onChange={(e) => setFormTier1Subtitle(e.target.value)}
+                      placeholder={autoTierSubtitle(0, formTier1FreeShipping)}
+                      className="w-full p-1.5 border border-neutral-200 rounded-lg text-[10px]"
+                    />
                     <label className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700 cursor-pointer pt-1">
                       <input
                         type="checkbox"
@@ -1064,6 +1094,14 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ onNavigateToProduc
                       placeholder="Badge (e.g. Most Popular)"
                       className="w-full p-1.5 border border-neutral-200 rounded-lg text-[10px]"
                     />
+                    <label className="block text-[10px] text-neutral-500">Text under "Buy 2" (leave empty for default)</label>
+                    <input
+                      type="text"
+                      value={formTier2Subtitle}
+                      onChange={(e) => setFormTier2Subtitle(e.target.value)}
+                      placeholder={autoTierSubtitle(1, formTier2FreeShipping)}
+                      className="w-full p-1.5 border border-neutral-200 rounded-lg text-[10px]"
+                    />
                     <label className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700 cursor-pointer pt-1">
                       <input
                         type="checkbox"
@@ -1084,6 +1122,14 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ onNavigateToProduc
                       value={formTier3Price || Math.round(formPrice * 3 * 0.8)}
                       onChange={(e) => setFormTier3Price(Number(e.target.value))}
                       className="w-full p-2 border border-neutral-200 rounded-lg text-xs font-bold"
+                    />
+                    <label className="block text-[10px] text-neutral-500">Text under "Buy 3" (leave empty for default)</label>
+                    <input
+                      type="text"
+                      value={formTier3Subtitle}
+                      onChange={(e) => setFormTier3Subtitle(e.target.value)}
+                      placeholder={autoTierSubtitle(2, formTier3FreeShipping)}
+                      className="w-full p-1.5 border border-neutral-200 rounded-lg text-[10px]"
                     />
                     <label className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700 cursor-pointer pt-1">
                       <input
