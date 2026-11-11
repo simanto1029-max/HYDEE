@@ -41,10 +41,34 @@ export const formatOrderDateTime = (dateString?: string): string => {
   }
 };
 
+type OrderTab = 'confirmed' | 'review' | 'leads' | 'all';
+
+// Prepayment order where the customer typed a TrxID and the shop must check the bKash/Nagad app
+const isPaymentReview = (o: Order) => o.status === 'PENDING_ADVANCE' && o.paymentStatus === 'MANUAL_REVIEW';
+
+// Prepayment order where the customer left before paying (no TrxID): a sales lead, NOT a real order
+const isIncompleteLead = (o: Order) =>
+  o.status === 'PENDING_ADVANCE' &&
+  o.paymentType === 'full_prepaid' &&
+  o.paymentStatus !== 'MANUAL_REVIEW' &&
+  o.paymentStatus !== 'FULLY_PAID' &&
+  o.paymentStatus !== 'ADVANCE_VERIFIED';
+
+const leadWhatsAppLink = (o: Order) => {
+  const phone = (o.customerPhone || '').replace(/\D/g, '');
+  const intl = phone.startsWith('880') ? phone : `88${phone.replace(/^0*/, '0')}`;
+  const msg =
+    `আসসালামু আলাইকুম ${o.customerName}, HYDEE থেকে বলছি। আপনার ৳${o.totalAmount.toLocaleString()} টাকার অর্ডারটি (${o.orderNumber}) চেকআউটে অসম্পূর্ণ অবস্থায় আছে। ` +
+    `আপনি কি এটি ক্যাশ অন ডেলিভারিতে (ডেলিভারির সময় টাকা দিয়ে) নিতে চান?`;
+  return `https://wa.me/${intl}?text=${encodeURIComponent(msg)}`;
+};
+
 export const AdminOrders: React.FC = () => {
   const [orders, setOrders] = useState<Order[]>(store.getOrders());
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [tab, setTab] = useState<OrderTab>('confirmed');
+  const [actionNotice, setActionNotice] = useState<{ type: 'ok' | 'error'; text: string } | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [orderToDelete, setOrderToDelete] = useState<Order | null>(null);
 
@@ -149,6 +173,45 @@ export const AdminOrders: React.FC = () => {
     refreshOrders();
   };
 
+  const handleApprovePayment = (order: Order) => {
+    const method = (order.advancePaymentMethod as any) || 'bkash';
+    const ok = window.confirm(
+      `bKash/Nagad অ্যাপ বা SMS-এ কি TrxID ${order.transactionId} দিয়ে ৳${order.totalAmount.toLocaleString()} টাকা এসেছে?\n\nনিশ্চিত হলে OK চাপুন। অর্ডার কনফার্ম হবে ও স্টক কমবে।`
+    );
+    if (!ok) return;
+    const result = store.verifyAdvancePayment(order.orderNumber, method, order.transactionId || '', 'Admin verified payment in app');
+    setActionNotice(
+      result.success
+        ? { type: 'ok', text: `Order ${order.orderNumber} confirmed.` }
+        : { type: 'error', text: result.error || 'Could not confirm payment.' }
+    );
+    refreshOrders();
+  };
+
+  const handleRejectPayment = (order: Order) => {
+    const ok = window.confirm(`TrxID ${order.transactionId} এর টাকা আসেনি বা ভুল? অর্ডারটি "অসম্পূর্ণ লিড" ট্যাবে চলে যাবে।`);
+    if (!ok) return;
+    const result = store.rejectSubmittedPayment(order.orderNumber);
+    setActionNotice(
+      result.success
+        ? { type: 'ok', text: `Payment for ${order.orderNumber} rejected. It is now an incomplete lead.` }
+        : { type: 'error', text: result.error || 'Could not reject payment.' }
+    );
+    refreshOrders();
+  };
+
+  const handleConvertLeadToCod = (order: Order) => {
+    const ok = window.confirm(`${order.customerName} কি ক্যাশ অন ডেলিভারিতে নিতে রাজি? OK দিলে অর্ডার কনফার্ম হবে ও স্টক কমবে।`);
+    if (!ok) return;
+    const result = store.convertLeadToCod(order.orderNumber);
+    setActionNotice(
+      result.success
+        ? { type: 'ok', text: `Order ${order.orderNumber} is now a confirmed Cash on Delivery order.` }
+        : { type: 'error', text: result.error || 'Could not convert this lead.' }
+    );
+    refreshOrders();
+  };
+
   const handleDeleteOrder = (order: Order) => {
     store.deleteOrder(order.id);
     if (selectedOrder && selectedOrder.id === order.id) {
@@ -224,8 +287,17 @@ export const AdminOrders: React.FC = () => {
       (order.courierTrackingCode && order.courierTrackingCode.toLowerCase().includes(search.toLowerCase()));
 
     const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
-    return matchesSearch && matchesStatus;
+    const matchesTab =
+      tab === 'all' ||
+      (tab === 'review' && isPaymentReview(order)) ||
+      (tab === 'leads' && isIncompleteLead(order)) ||
+      (tab === 'confirmed' && !isPaymentReview(order) && !isIncompleteLead(order));
+    return matchesSearch && matchesStatus && matchesTab;
   });
+
+  const reviewCount = orders.filter(isPaymentReview).length;
+  const leadsCount = orders.filter(isIncompleteLead).length;
+  const confirmedCount = orders.filter((o) => !isPaymentReview(o) && !isIncompleteLead(o)).length;
 
   return (
     <div className="space-y-6">
@@ -258,6 +330,41 @@ export const AdminOrders: React.FC = () => {
           <span>{testSuccessNotice}</span>
         </div>
       )}
+
+      {actionNotice && (
+        <div
+          className={`p-3 border text-xs rounded-xl flex items-center justify-between gap-2 ${
+            actionNotice.type === 'ok' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-red-50 border-red-200 text-red-800'
+          }`}
+        >
+          <span>{actionNotice.text}</span>
+          <button onClick={() => setActionNotice(null)} className="font-bold cursor-pointer">×</button>
+        </div>
+      )}
+
+      {/* Order tabs */}
+      <div className="flex flex-wrap gap-2">
+        {([
+          ['confirmed', `📦 Confirmed Orders (${confirmedCount})`],
+          ['review', `🔎 Verify Payment (${reviewCount})`],
+          ['leads', `⚡ Incomplete Leads (${leadsCount})`],
+          ['all', `📋 All Records (${orders.length})`],
+        ] as [OrderTab, string][]).map(([key, label]) => (
+          <button
+            key={key}
+            onClick={() => setTab(key)}
+            className={`text-xs font-semibold px-4 py-2.5 rounded-xl border transition-colors cursor-pointer ${
+              tab === key
+                ? 'bg-[#800000] text-white border-[#800000]'
+                : key === 'review' && reviewCount > 0
+                ? 'bg-amber-50 text-amber-800 border-amber-300'
+                : 'bg-white text-neutral-700 border-neutral-200 hover:bg-neutral-50'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
 
       {/* Filter and Search Bar */}
       <div className="flex flex-col sm:flex-row gap-3">
@@ -362,20 +469,59 @@ export const AdminOrders: React.FC = () => {
                               {order.advancePaymentMethod?.toUpperCase()} · {order.transactionId}
                             </span>
                           </div>
+                        ) : isPaymentReview(order) ? (
+                          <div>
+                            <span className="text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-md text-[10px] font-bold font-sans block w-fit">
+                              Awaiting your check
+                            </span>
+                            <span className="text-[10px] text-neutral-700 block mt-0.5 font-mono">
+                              {order.advancePaymentMethod?.toUpperCase()} · {order.transactionId}
+                            </span>
+                            <div className="flex gap-3 mt-1">
+                              <button
+                                onClick={() => handleApprovePayment(order)}
+                                className="text-[10px] text-emerald-700 font-bold hover:underline cursor-pointer"
+                              >
+                                ✓ Money received
+                              </button>
+                              <button
+                                onClick={() => handleRejectPayment(order)}
+                                className="text-[10px] text-red-700 font-bold hover:underline cursor-pointer"
+                              >
+                                ✗ Not received
+                              </button>
+                            </div>
+                          </div>
                         ) : (
                           <div>
                             <span className="text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md text-[10px] font-bold font-sans tabular-nums block w-fit">
-                              Pending Full Prepayment
+                              Incomplete · no payment yet
                             </span>
-                            <button
-                              onClick={() => {
-                                setSelectedOrder(order);
-                                setIsVerifyModalOpen(true);
-                              }}
-                              className="text-[10px] text-[#800000] font-semibold hover:underline mt-1 block cursor-pointer"
-                            >
-                              + Manual Verify TrxID
-                            </button>
+                            <div className="flex flex-col gap-0.5 mt-1">
+                              <a
+                                href={leadWhatsAppLink(order)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-[10px] text-emerald-700 font-semibold hover:underline"
+                              >
+                                💬 WhatsApp follow-up
+                              </a>
+                              <button
+                                onClick={() => handleConvertLeadToCod(order)}
+                                className="text-[10px] text-[#800000] font-semibold hover:underline text-left cursor-pointer"
+                              >
+                                ⚡ Convert to COD
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setSelectedOrder(order);
+                                  setIsVerifyModalOpen(true);
+                                }}
+                                className="text-[10px] text-neutral-600 font-semibold hover:underline text-left cursor-pointer"
+                              >
+                                + Manual Verify TrxID
+                              </button>
+                            </div>
                           </div>
                         )}
                       </td>
@@ -447,7 +593,7 @@ export const AdminOrders: React.FC = () => {
                       </td>
                       <td className="p-4 text-right space-x-2 whitespace-nowrap">
                         {/* Quick Action Button */}
-                        {!isDelivered && (
+                        {!isDelivered && order.status !== 'PENDING_ADVANCE' && order.status !== 'CANCELLED' && (
                           <>
                             {!isShipped ? (
                               <button
