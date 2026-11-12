@@ -18,6 +18,8 @@ import {
   Image as ImageIcon,
 } from 'lucide-react';
 import { store } from '../../services/store';
+import { isSupabaseConfigured } from '../../services/supabase';
+import { uploadDataUrlToStorage, containsDataUrl, replaceDataUrlsWithStorageLinks } from '../../services/imageStorage';
 import { Product, ProductVariant, BundleTier, Category } from '../../types';
 
 interface AdminProductsProps {
@@ -102,6 +104,9 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ onNavigateToProduc
   const [formTier3Price, setFormTier3Price] = useState<number>(0);
   const [formTier3FreeShipping, setFormTier3FreeShipping] = useState<boolean>(true);
   // Custom text under Buy 1/2/3. Empty = use the automatic default text
+  const [migrating, setMigrating] = useState(false);
+  const [migrateMsg, setMigrateMsg] = useState<{ type: 'ok' | 'error'; text: string } | null>(null);
+  const [uploadWarning, setUploadWarning] = useState<string | null>(null);
   const [formTier1Subtitle, setFormTier1Subtitle] = useState('');
   const [formTier2Subtitle, setFormTier2Subtitle] = useState('');
   const [formTier3Subtitle, setFormTier3Subtitle] = useState('');
@@ -185,7 +190,21 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ onNavigateToProduc
       const compressedPromises = files.map((file) => compressImageFile(file));
       const results = await Promise.all(compressedPromises);
       const valid = results.filter(Boolean);
-      setFormImagesList((prev) => [...prev, ...valid]);
+
+      // Send each new photo to fast image storage (a small link is saved instead of a heavy embedded picture)
+      let finalImages = valid;
+      if (isSupabaseConfigured) {
+        try {
+          finalImages = await Promise.all(valid.map((img) => uploadDataUrlToStorage(img)));
+          setUploadWarning(null);
+        } catch (err: any) {
+          console.error('Image storage upload failed:', err);
+          setUploadWarning(
+            `${err?.message || 'Image upload failed.'} The photo was still added, but it will make the website slower until storage is set up.`
+          );
+        }
+      }
+      setFormImagesList((prev) => [...prev, ...finalImages]);
     } catch (err) {
       console.error('Error compressing uploaded files:', err);
     }
@@ -222,6 +241,43 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ onNavigateToProduc
 
   const handleRemoveImage = (index: number) => {
     setFormImagesList((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  // One-time: move every old embedded (base64) picture to fast image storage
+  const heavyProducts = products.filter((p) => containsDataUrl(p));
+
+  const handleMigrateImages = async () => {
+    if (migrating) return;
+    setMigrating(true);
+    setMigrateMsg(null);
+    const cache = new Map<string, string>();
+    let uploaded = 0;
+    let failed = 0;
+    let lastError = '';
+    const list = store.getProducts().filter((p) => containsDataUrl(p));
+
+    for (let i = 0; i < list.length; i++) {
+      setMigrateMsg({ type: 'ok', text: `Moving images… product ${i + 1} of ${list.length} (${uploaded} photos done)` });
+      try {
+        const updated = await replaceDataUrlsWithStorageLinks(list[i], cache, () => {
+          uploaded++;
+        });
+        store.saveProduct(updated);
+      } catch (err: any) {
+        failed++;
+        lastError = err?.message || String(err);
+        console.error('Image migration failed for', list[i].name, err);
+      }
+    }
+
+    setProducts(store.getProducts());
+    if (failed === 0) {
+      store.updateSettings({ imagesInStorage: true });
+      setMigrateMsg({ type: 'ok', text: `Done! ${uploaded} photos moved. Your website will now load much faster.` });
+    } else {
+      setMigrateMsg({ type: 'error', text: `${failed} product(s) could not be moved: ${lastError}` });
+    }
+    setMigrating(false);
   };
 
   const handleOpenCreate = () => {
@@ -501,6 +557,35 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ onNavigateToProduc
           <span>New Garment Piece</span>
         </button>
       </div>
+
+      {uploadWarning && (
+        <div className="p-3.5 bg-amber-50 border border-amber-200 text-amber-900 text-xs rounded-xl">{uploadWarning}</div>
+      )}
+
+      {isSupabaseConfigured && (heavyProducts.length > 0 || migrateMsg) && (
+        <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="text-xs text-blue-950 leading-relaxed">
+            <strong>⚡ Make your website faster.</strong>{' '}
+            {heavyProducts.length > 0
+              ? `${heavyProducts.length} product(s) still keep heavy pictures inside the database. Move them to fast image storage once (the picture quality stays exactly the same).`
+              : 'All pictures are in fast image storage.'}
+            {migrateMsg && (
+              <span className={`block mt-1 font-semibold ${migrateMsg.type === 'error' ? 'text-red-700' : 'text-emerald-700'}`}>
+                {migrateMsg.text}
+              </span>
+            )}
+          </div>
+          {heavyProducts.length > 0 && (
+            <button
+              onClick={handleMigrateImages}
+              disabled={migrating}
+              className="bg-blue-700 hover:bg-blue-800 disabled:opacity-60 text-white text-xs font-semibold px-4 py-2.5 rounded-xl cursor-pointer shrink-0"
+            >
+              {migrating ? 'Moving…' : 'Move images now'}
+            </button>
+          )}
+        </div>
+      )}
 
       {deleteNotice && (
         <div className="p-3.5 bg-red-50 border border-red-200 text-red-800 text-xs rounded-xl flex items-center gap-2 font-bold animate-in fade-in">
