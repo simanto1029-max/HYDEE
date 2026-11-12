@@ -1,4 +1,5 @@
 import {
+  CheckoutLead,
   AuditLog,
   CartItem,
   Category,
@@ -415,7 +416,8 @@ class StoreService {
           .map((r: any) => r.id as string);
 
         const previousProducts: Product[] = [...this.products];
-        const BATCH_SIZE = 2; // heavy rows (big images) are fetched 2 at a time so none of them times out
+        // Images in Storage = tiny rows: fetch 12 at once. Old heavy rows (images inside the database): 2 at a time so none times out.
+        const BATCH_SIZE = this.settings.imagesInStorage ? 12 : 2;
         const CONCURRENCY = 3; // ...but 3 requests run at the same time to load faster
         const sb = supabase;
 
@@ -1480,6 +1482,147 @@ class StoreService {
 
     this.persist();
     return { success: true, order };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Fake / duplicate order protection: the same phone cannot place a second real order within 10 minutes
+  // ---------------------------------------------------------------------------
+  static normalizePhone(raw: string): string {
+    let d = (raw || '').replace(/\D/g, '');
+    if (d.startsWith('880') && d.length === 13) d = '0' + d.slice(3);
+    return d;
+  }
+
+  private static readonly ORDER_COOLDOWN_MS = 10 * 60 * 1000;
+
+  // A "real" order = Cash on Delivery, or a prepaid order where the customer really submitted a payment.
+  // Abandoned prepayment attempts do NOT count, so a customer can retry after closing the payment popup.
+  private isRealOrderForCooldown(o: { status?: string; paymentStatus?: string; isTestOrder?: boolean }): boolean {
+    if (o.isTestOrder || o.status === 'CANCELLED') return false;
+    return o.status !== 'PENDING_ADVANCE' || o.paymentStatus === 'MANUAL_REVIEW';
+  }
+
+  async checkOrderCooldown(rawPhone: string): Promise<{ blocked: boolean; minutesLeft: number }> {
+    const phone = StoreService.normalizePhone(rawPhone);
+    const now = Date.now();
+    const windowMs = StoreService.ORDER_COOLDOWN_MS;
+    let latest = 0;
+
+    // 1) orders this browser already knows
+    for (const o of this.orders) {
+      if (StoreService.normalizePhone(o.customerPhone) !== phone) continue;
+      if (!this.isRealOrderForCooldown(o)) continue;
+      const t = new Date(o.createdAt).getTime();
+      if (now - t < windowMs) latest = Math.max(latest, t);
+    }
+
+    // 2) orders saved in the database (made from any phone / browser), max 3 seconds of waiting
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const cutoff = new Date(now - windowMs).toISOString();
+        const query = supabase
+          .from('orders')
+          .select('created_at, status, payment_status')
+          .in('customer_phone', [phone, '88' + phone])
+          .gte('created_at', cutoff)
+          .neq('status', 'CANCELLED')
+          .limit(10);
+        const res: any = await Promise.race([
+          query,
+          new Promise((resolve) => setTimeout(() => resolve({ data: null, error: 'timeout' }), 3000)),
+        ]);
+        if (!res.error && Array.isArray(res.data)) {
+          for (const row of res.data) {
+            if (!this.isRealOrderForCooldown({ status: row.status, paymentStatus: row.payment_status })) continue;
+            latest = Math.max(latest, new Date(row.created_at).getTime());
+          }
+        }
+      } catch (e) {
+        // database unreachable: fall back to what this browser knows
+      }
+    }
+
+    if (latest > 0 && now - latest < windowMs) {
+      return { blocked: true, minutesLeft: Math.max(1, Math.ceil((latest + windowMs - now) / 60000)) };
+    }
+    return { blocked: false, minutesLeft: 0 };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Abandoned checkouts: people who typed their phone number but never ordered
+  // ---------------------------------------------------------------------------
+  saveCheckoutLead(input: {
+    name: string;
+    phone: string;
+    address: string;
+    items: { name: string; quantity: number; price: number; size?: string; color?: string }[];
+    total: number;
+    zone?: string;
+  }): void {
+    const phone = StoreService.normalizePhone(input.phone);
+    if (!/^01[3-9]\d{8}$/.test(phone) || input.items.length === 0) return;
+    if (!isSupabaseConfigured || !supabase) return;
+
+    // status / created_at are not sent, so an existing lead keeps them (admin's "contacted" mark stays)
+    supabase
+      .from('checkout_leads')
+      .upsert({
+        id: `lead-${phone}`,
+        name: input.name.trim(),
+        phone,
+        address: input.address.trim(),
+        items: input.items,
+        total: input.total,
+        zone: input.zone || null,
+        updated_at: new Date().toISOString(),
+      })
+      .then(({ error }) => {
+        if (error) console.warn('[HYDEE] checkout lead not saved (run supabase/HYDEE_ADD_CHECKOUT_LEADS.sql):', error.message);
+      });
+  }
+
+  removeCheckoutLeadForPhone(rawPhone: string): void {
+    const phone = StoreService.normalizePhone(rawPhone);
+    if (!phone || !isSupabaseConfigured || !supabase) return;
+    supabase
+      .from('checkout_leads')
+      .delete()
+      .eq('id', `lead-${phone}`)
+      .then(() => {});
+  }
+
+  async fetchCheckoutLeads(): Promise<{ leads: CheckoutLead[]; error?: string }> {
+    if (!isSupabaseConfigured || !supabase) return { leads: [], error: 'Supabase is not connected.' };
+    const { data, error } = await supabase
+      .from('checkout_leads')
+      .select('*')
+      .order('updated_at', { ascending: false })
+      .limit(300);
+    if (error) return { leads: [], error: error.message };
+    return {
+      leads: (data || []).map((r: any) => ({
+        id: r.id,
+        name: r.name || '',
+        phone: r.phone || '',
+        address: r.address || '',
+        items: Array.isArray(r.items) ? r.items : [],
+        total: Number(r.total) || 0,
+        zone: r.zone || undefined,
+        status: r.status === 'contacted' ? 'contacted' : 'open',
+        createdAt: r.created_at,
+        updatedAt: r.updated_at || r.created_at,
+      })),
+    };
+  }
+
+  async setCheckoutLeadStatus(id: string, status: 'open' | 'contacted'): Promise<void> {
+    if (!isSupabaseConfigured || !supabase) return;
+    await supabase.from('checkout_leads').update({ status }).eq('id', id);
+  }
+
+  async deleteCheckoutLead(id: string): Promise<void> {
+    if (!isSupabaseConfigured || !supabase) return;
+    await supabase.from('checkout_leads').delete().eq('id', id);
   }
 
   // Customer typed a TrxID in the payment popup. This does NOT confirm the order:
