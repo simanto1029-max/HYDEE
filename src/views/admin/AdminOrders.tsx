@@ -21,7 +21,7 @@ import {
   Banknote,
 } from 'lucide-react';
 import { store } from '../../services/store';
-import { Order, OrderStatus } from '../../types';
+import { Order, OrderStatus, CheckoutLead } from '../../types';
 
 export const formatOrderDateTime = (dateString?: string): string => {
   if (!dateString) return 'Just now';
@@ -41,7 +41,7 @@ export const formatOrderDateTime = (dateString?: string): string => {
   }
 };
 
-type OrderTab = 'confirmed' | 'review' | 'leads' | 'all';
+type OrderTab = 'confirmed' | 'review' | 'leads' | 'abandoned' | 'all';
 
 // Prepayment order where the customer typed a TrxID and the shop must check the bKash/Nagad app
 const isPaymentReview = (o: Order) => o.status === 'PENDING_ADVANCE' && o.paymentStatus === 'MANUAL_REVIEW';
@@ -63,11 +63,33 @@ const leadWhatsAppLink = (o: Order) => {
   return `https://wa.me/${intl}?text=${encodeURIComponent(msg)}`;
 };
 
+const timeAgo = (iso: string): string => {
+  const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins} min ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs} hr ago`;
+  return `${Math.round(hrs / 24)} day ago`;
+};
+
+const abandonedWhatsAppLink = (l: CheckoutLead) => {
+  const phone = l.phone.replace(/\D/g, '');
+  const intl = phone.startsWith('880') ? phone : `88${phone}`;
+  const what = l.items.map((i) => `${i.name} × ${i.quantity}`).join(', ');
+  const msg =
+    `আসসালামু আলাইকুম${l.name ? ' ' + l.name : ''}, HYDEE থেকে বলছি। আপনি আমাদের ওয়েবসাইটে ${what} অর্ডার করতে চেয়েছিলেন, কিন্তু অর্ডারটি সম্পূর্ণ হয়নি। ` +
+    `কোনো সমস্যা হয়েছে কি? আমরা কি আপনাকে অর্ডার সম্পূর্ণ করতে সাহায্য করতে পারি?`;
+  return `https://wa.me/${intl}?text=${encodeURIComponent(msg)}`;
+};
+
 export const AdminOrders: React.FC = () => {
   const [orders, setOrders] = useState<Order[]>(store.getOrders());
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [tab, setTab] = useState<OrderTab>('confirmed');
+  const [leads, setLeads] = useState<CheckoutLead[]>([]);
+  const [leadsError, setLeadsError] = useState<string | null>(null);
+  const [leadsLoading, setLeadsLoading] = useState(false);
   const [actionNotice, setActionNotice] = useState<{ type: 'ok' | 'error'; text: string } | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [orderToDelete, setOrderToDelete] = useState<Order | null>(null);
@@ -172,6 +194,33 @@ export const AdminOrders: React.FC = () => {
     setVerifyTrxId('');
     refreshOrders();
   };
+
+  const loadLeads = async () => {
+    setLeadsLoading(true);
+    const result = await store.fetchCheckoutLeads();
+    setLeads(result.leads);
+    setLeadsError(result.error || null);
+    setLeadsLoading(false);
+  };
+
+  useEffect(() => {
+    loadLeads();
+    const timer = setInterval(loadLeads, 60000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Hide leads whose phone number has since placed a real order
+  const realOrderTimeByPhone = new Map<string, number>();
+  orders.forEach((o) => {
+    if (o.isTestOrder || o.status === 'CANCELLED') return;
+    if (o.status === 'PENDING_ADVANCE' && o.paymentStatus !== 'MANUAL_REVIEW') return;
+    const phone = (o.customerPhone || '').replace(/\D/g, '').replace(/^880/, '0');
+    realOrderTimeByPhone.set(phone, Math.max(realOrderTimeByPhone.get(phone) || 0, new Date(o.createdAt).getTime()));
+  });
+  const visibleLeads = leads.filter((l) => {
+    const orderedAt = realOrderTimeByPhone.get(l.phone);
+    return !(orderedAt && orderedAt >= new Date(l.createdAt).getTime());
+  });
 
   const handleApprovePayment = (order: Order) => {
     const method = (order.advancePaymentMethod as any) || 'bkash';
@@ -348,6 +397,7 @@ export const AdminOrders: React.FC = () => {
           ['confirmed', `📦 Confirmed Orders (${confirmedCount})`],
           ['review', `🔎 Verify Payment (${reviewCount})`],
           ['leads', `⚡ Incomplete Leads (${leadsCount})`],
+          ['abandoned', `🛒 Abandoned Checkouts (${visibleLeads.length})`],
           ['all', `📋 All Records (${orders.length})`],
         ] as [OrderTab, string][]).map(([key, label]) => (
           <button
@@ -366,6 +416,108 @@ export const AdminOrders: React.FC = () => {
         ))}
       </div>
 
+      {tab === 'abandoned' ? (
+        <div className="bg-white rounded-2xl border border-neutral-200 shadow-xs overflow-hidden">
+          <div className="p-4 border-b border-neutral-100 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs text-neutral-600 leading-relaxed max-w-2xl">
+              এরা checkout পাতায় মোবাইল নম্বর লিখেছে কিন্তু অর্ডার সম্পূর্ণ করেনি। ফোন বা WhatsApp করে অর্ডার নিশ্চিত করতে পারেন। অর্ডার হয়ে গেলে নাম নিজে থেকে তালিকা থেকে চলে যাবে।
+            </p>
+            <button
+              onClick={loadLeads}
+              className="text-xs font-semibold px-3 py-2 rounded-lg border border-neutral-200 hover:bg-neutral-50 cursor-pointer"
+            >
+              {leadsLoading ? 'Loading…' : '↻ Refresh'}
+            </button>
+          </div>
+
+          {leadsError && (
+            <div className="m-4 p-3 bg-amber-50 border border-amber-200 text-amber-900 text-xs rounded-xl">
+              তালিকা আনা যায়নি: {leadsError}. যদি এটা প্রথমবার হয়, Supabase SQL Editor-এ <strong>supabase/HYDEE_ADD_CHECKOUT_LEADS.sql</strong> একবার চালান।
+            </div>
+          )}
+
+          <div className="overflow-x-auto no-scrollbar">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="bg-neutral-50 text-[10px] uppercase tracking-wider text-neutral-500">
+                  <th className="px-4 py-3">When</th>
+                  <th className="px-4 py-3">Customer</th>
+                  <th className="px-4 py-3">Address</th>
+                  <th className="px-4 py-3">Wanted to buy</th>
+                  <th className="px-4 py-3">Total</th>
+                  <th className="px-4 py-3">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-neutral-100">
+                {visibleLeads.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-10 text-center text-neutral-500">
+                      এখন কোনো অসম্পূর্ণ checkout নেই।
+                    </td>
+                  </tr>
+                ) : (
+                  visibleLeads.map((l) => (
+                    <tr key={l.id} className="align-top">
+                      <td className="px-4 py-3 whitespace-nowrap text-neutral-600">
+                        {timeAgo(l.updatedAt)}
+                        {l.status === 'contacted' && (
+                          <span className="block mt-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.5 w-fit">
+                            Contacted
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="font-bold text-neutral-900">{l.name || '(name not typed)'}</div>
+                        <div className="font-mono text-neutral-700">{l.phone}</div>
+                      </td>
+                      <td className="px-4 py-3 max-w-[220px] text-neutral-700">{l.address || '—'}</td>
+                      <td className="px-4 py-3 text-neutral-700">
+                        {l.items.map((i, idx) => (
+                          <div key={idx}>
+                            {i.name} × {i.quantity}
+                            {i.size ? ` · ${i.size}` : ''}
+                          </div>
+                        ))}
+                      </td>
+                      <td className="px-4 py-3 font-bold tabular-nums">৳{l.total.toLocaleString()}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-col gap-1 items-start">
+                          <a href={abandonedWhatsAppLink(l)} target="_blank" rel="noopener noreferrer" className="text-emerald-700 font-semibold hover:underline">
+                            💬 WhatsApp
+                          </a>
+                          <a href={`tel:${l.phone}`} className="text-[#800000] font-semibold hover:underline">
+                            📞 Call
+                          </a>
+                          <button
+                            onClick={async () => {
+                              await store.setCheckoutLeadStatus(l.id, l.status === 'contacted' ? 'open' : 'contacted');
+                              loadLeads();
+                            }}
+                            className="text-neutral-600 font-semibold hover:underline cursor-pointer"
+                          >
+                            {l.status === 'contacted' ? '↺ Mark not contacted' : '✓ Mark contacted'}
+                          </button>
+                          <button
+                            onClick={async () => {
+                              if (!window.confirm('এই এন্ট্রি মুছে ফেলবেন?')) return;
+                              await store.deleteCheckoutLead(l.id);
+                              loadLeads();
+                            }}
+                            className="text-red-600 font-semibold hover:underline cursor-pointer"
+                          >
+                            🗑 Delete
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : (
+        <>
       {/* Filter and Search Bar */}
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
@@ -643,6 +795,9 @@ export const AdminOrders: React.FC = () => {
           </table>
         </div>
       </div>
+
+        </>
+      )}
 
       {/* Order Details & Dispatch Modal */}
       {selectedOrder && !isVerifyModalOpen && !isDispatchModalOpen && !orderToDelete && (
