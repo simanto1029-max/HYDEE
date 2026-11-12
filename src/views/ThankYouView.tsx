@@ -27,22 +27,25 @@ export const ThankYouView: React.FC<ThankYouViewProps> = ({ orderNumber, onNavig
     // Scroll to top on mount
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
-    // Meta Pixel Purchase Event (Only fire once per confirmed session)
+    // Meta Pixel Purchase event: one per order (duplicates are blocked even after a reload).
+    // Sent for Cash on Delivery orders and for prepaid orders once the customer has submitted / completed payment.
+    // NOT sent for abandoned prepaid checkouts (no payment yet).
     if (order && !hasFiredPixel.current) {
-      const isConfirmed =
+      const isRealPurchase =
         order.status === 'CONFIRMED' ||
         order.paymentStatus === 'ADVANCE_VERIFIED' ||
         order.paymentStatus === 'FULLY_PAID' ||
+        order.paymentStatus === 'MANUAL_REVIEW' ||
         !order.isFullPayment;
 
-      if (isConfirmed) {
-        metaPixel.track('Purchase', {
-          content_ids: order.items.map((i) => i.productId),
-          content_type: 'product',
-          value: order.totalAmount,
-          currency: 'BDT',
-          num_items: order.items.reduce((s, i) => s + i.quantity, 0),
-        });
+      if (isRealPurchase) {
+        metaPixel.trackPurchase(
+          order.orderNumber,
+          order.totalAmount,
+          'BDT',
+          order.items.reduce((sum, i) => sum + i.quantity, 0),
+          order.items.map((i) => ({ id: i.productId, quantity: i.quantity, price: i.price }))
+        );
         hasFiredPixel.current = true;
       }
     }
