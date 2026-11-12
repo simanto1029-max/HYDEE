@@ -222,6 +222,8 @@ export interface SiteSettings {
   adminEmail?: string;
   adminPassword?: string;
   metaPixelId?: string;
+  // true after the admin moved all product images from the database to Supabase Storage (faster loading)
+  imagesInStorage?: boolean;
   isPixelTestMode: boolean;
   courierSteadfastApiKey?: string;
   courierPathaoApiKey?: string;
@@ -240,4 +242,19 @@ export interface AuditLog {
   action: string;
   details: string;
   user: string;
+}
+
+
+// Someone who typed their phone number (and maybe name / address) at checkout but never placed an order
+export interface CheckoutLead {
+  id: string; // lead-<phone>
+  name: string;
+  phone: string;
+  address: string;
+  items: { name: string; quantity: number; price: number; size?: string; color?: string }[];
+  total: number;
+  zone?: string;
+  status: 'open' | 'contacted';
+  createdAt: string;
+  updatedAt: string;
 }
