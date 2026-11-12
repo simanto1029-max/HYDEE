@@ -76,6 +76,29 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
   const [isVerifyingPayment, setIsVerifyingPayment] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
 
+  // Remember people who typed their phone number but did not finish the order (shown to the admin as "Abandoned Checkouts")
+  useEffect(() => {
+    const cleanLeadPhone = phone.trim();
+    if (!/^01[3-9]\d{8}$/.test(cleanLeadPhone) || checkoutItems.length === 0 || pendingOrder) return;
+    const timer = setTimeout(() => {
+      store.saveCheckoutLead({
+        name: `${firstName.trim()} ${lastName.trim()}`.trim(),
+        phone: cleanLeadPhone,
+        address: deliveryAddress,
+        items: checkoutItems.map((i) => ({
+          name: i.name,
+          quantity: i.quantity,
+          price: i.price,
+          size: i.size,
+          color: i.color,
+        })),
+        total: checkoutItems.reduce((sum, i) => sum + i.price * i.quantity, 0),
+        zone: selectedZone?.name,
+      });
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, [phone, firstName, lastName, deliveryAddress, checkoutItems.length, selectedZoneId, pendingOrder]);
+
   // Calculations
   const subtotal = checkoutItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const totalItemCount = checkoutItems.reduce((sum, item) => sum + item.quantity, 0);
@@ -186,7 +209,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
   };
 
   // Form submission: Validate inputs, create pending order and OPEN the payment modal
-  const handleSubmitCheckout = (e: React.FormEvent) => {
+  const handleSubmitCheckout = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
@@ -205,7 +228,18 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
       return;
     }
 
+    if (isSubmitting) return;
     setIsSubmitting(true);
+
+    // Same mobile number cannot place another order within 10 minutes (stops fake and accidental duplicate orders)
+    const cooldown = await store.checkOrderCooldown(cleanPhone);
+    if (cooldown.blocked) {
+      setIsSubmitting(false);
+      setError(
+        `এই মোবাইল নম্বর থেকে একটু আগেই অর্ডার করা হয়েছে। অনুগ্রহ করে ${cooldown.minutesLeft} মিনিট পর আবার চেষ্টা করুন, অথবা আমাদের কল করে জানান। (An order was just placed with this number. Please try again in ${cooldown.minutesLeft} min.)`
+      );
+      return;
+    }
 
     const result = store.createOrder({
       customerName: fullName,
@@ -228,6 +262,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
     }
 
     const createdOrder = result.order;
+    store.removeCheckoutLeadForPhone(cleanPhone); // now it is a real order, not just an abandoned checkout
 
     // For Cash on Delivery: Order is placed and confirmed immediately! Zero advance payment popup!
     if (paymentType === 'advance_cod') {
@@ -348,7 +383,6 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                       <input
                         type="text"
                         required
-                        placeholder="Mohammad"
                         value={firstName}
                         onChange={(e) => setFirstName(e.target.value)}
                         className="w-full text-xs sm:text-sm font-semibold text-black focus:outline-hidden bg-transparent placeholder:text-neutral-500 mt-0.5"
@@ -365,7 +399,6 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                       </label>
                       <input
                         type="text"
-                        placeholder="Abdullah"
                         value={lastName}
                         onChange={(e) => setLastName(e.target.value)}
                         className="w-full text-xs sm:text-sm font-semibold text-black focus:outline-hidden bg-transparent placeholder:text-neutral-500 mt-0.5"
@@ -384,7 +417,6 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                     <input
                       type="tel"
                       required
-                      placeholder="017xxxxxxxx"
                       value={phone}
                       onChange={(e) => setPhone(e.target.value)}
                       className="w-full text-xs sm:text-sm font-mono font-bold text-black focus:outline-hidden bg-transparent placeholder:text-neutral-500 mt-0.5"
@@ -402,7 +434,6 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                     <textarea
                       rows={2}
                       required
-                      placeholder="e.g. Al, Helal 36, Noyasark, Sylhet -3100 (House / Road / Area)"
                       value={deliveryAddress}
                       onChange={(e) => setDeliveryAddress(e.target.value)}
                       className="w-full text-xs sm:text-sm font-semibold text-black focus:outline-hidden bg-transparent placeholder:text-neutral-500 mt-0.5 resize-none"
@@ -437,9 +468,6 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                               ৳{zone.advanceFee}
                             </span>
                           </div>
-                          <span className="text-[11px] text-black font-medium block mt-1">
-                            {zone.estimatedDays} · Standard Shipping
-                          </span>
                         </div>
                       );
                     })}
@@ -450,17 +478,9 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
 
             {/* Section 2: Payment Method (Only 2 clean options on the main page) */}
             <div className="pt-2">
-              <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
-                <h2 className="text-xl sm:text-2xl font-bold text-black tracking-tight">
-                  Payment Method
-                </h2>
-                <span className="text-[10px] sm:text-[11px] font-bold text-black uppercase tracking-wider bg-neutral-100 px-2.5 py-1 rounded-md">
-                  2 Options Available
-                </span>
-              </div>
-              <p className="text-xs text-black font-medium mb-4">
-                Select your payment mode for this booking:
-              </p>
+              <h2 className="text-xl sm:text-2xl font-bold text-black tracking-tight mb-4">
+                Payment Method
+              </h2>
 
               {/* Exactly 2 options */}
               <div className="space-y-3">
@@ -479,17 +499,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                       <Banknote className="w-5 h-5 text-black" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-                        <span className="text-xs sm:text-sm font-bold text-black">
-                          Cash On Delivery (ক্যাশ অন ডেলিভারি)
-                        </span>
-                        <span className="inline-flex shrink-0 text-[9px] sm:text-[10px] font-bold bg-[#800000] text-white px-2.5 py-0.5 rounded-full uppercase tracking-wider">
-                          100% Cash On Delivery
-                        </span>
-                      </div>
-                      <span className="text-[11px] text-black font-medium block mt-1 leading-snug">
-                        Pay full amount <strong>৳{totalAmount.toLocaleString()}</strong> in cash upon doorstep delivery. Zero advance payment required.
-                      </span>
+                      <span className="text-xs sm:text-sm font-bold text-black">Cash On Delivery</span>
                     </div>
                   </div>
                   <div
@@ -519,17 +529,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                       <ShieldCheck className="w-5 h-5 text-black" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-                        <span className="text-xs sm:text-sm font-bold text-black">
-                          Full Payment (100% Pre-paid / বিকাশ ও নগদ)
-                        </span>
-                        <span className="inline-flex shrink-0 text-[9px] sm:text-[10px] font-bold bg-neutral-900 text-white px-2.5 py-0.5 rounded-full uppercase tracking-wider">
-                          0% COD At Doorstep
-                        </span>
-                      </div>
-                      <span className="text-[11px] text-black font-medium block mt-1 leading-snug">
-                        Pay full order amount <strong>৳{totalAmount.toLocaleString()}</strong> now via bKash or Nagad · Zero cash collection (৳0) upon delivery.
-                      </span>
+                      <span className="text-xs sm:text-sm font-bold text-black">Full Payment (bKash / Nagad)</span>
                     </div>
                   </div>
                   <div
