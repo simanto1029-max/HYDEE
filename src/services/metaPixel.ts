@@ -77,22 +77,45 @@ class MetaPixelService {
     window.dispatchEvent(new CustomEvent('hydee_pixel_event', { detail: logEntry }));
   }
 
-  trackPurchase(orderNumber: string, totalAmount: number, currency: string = 'BDT', itemsCount: number = 1) {
-    // Prevent duplicate Purchase fires on reload
+  // One Purchase event per order, even if the customer reloads the thank-you page or opens it again later.
+  trackPurchase(
+    orderNumber: string,
+    totalAmount: number,
+    currency: string = 'BDT',
+    itemsCount: number = 1,
+    items: { id: string; quantity: number; price: number }[] = []
+  ) {
     const dedupKey = `purchase_${orderNumber}`;
-    if (this.firedPurchases.has(dedupKey)) {
-      console.warn(`[Meta Pixel] Deduplication prevented duplicate Purchase event for order: ${orderNumber}`);
+    let alreadySent = this.firedPurchases.has(dedupKey);
+    try {
+      const stored: string[] = JSON.parse(localStorage.getItem('hydee_purchase_events_sent') || '[]');
+      if (stored.includes(dedupKey)) alreadySent = true;
+    } catch (e) {}
+
+    if (alreadySent) {
+      console.warn(`[Meta Pixel] Purchase for order ${orderNumber} was already sent, skipping duplicate.`);
       return;
     }
     this.firedPurchases.add(dedupKey);
+    try {
+      const stored: string[] = JSON.parse(localStorage.getItem('hydee_purchase_events_sent') || '[]');
+      stored.push(dedupKey);
+      localStorage.setItem('hydee_purchase_events_sent', JSON.stringify(stored.slice(-200)));
+    } catch (e) {}
 
-    this.track('Purchase', {
-      value: totalAmount,
-      currency,
-      num_items: itemsCount,
-      content_type: 'product',
-      order_id: orderNumber,
-    }, `purch_${orderNumber}`);
+    this.track(
+      'Purchase',
+      {
+        value: totalAmount,
+        currency,
+        num_items: itemsCount,
+        content_type: 'product',
+        content_ids: items.map((i) => i.id),
+        contents: items.map((i) => ({ id: i.id, quantity: i.quantity, item_price: i.price })),
+        order_id: orderNumber,
+      },
+      `purch_${orderNumber}`
+    );
   }
 
   getRecentEvents(): PixelEventPayload[] {
