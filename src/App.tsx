@@ -18,6 +18,7 @@ import { LegalView } from './views/LegalView';
 import { AdminPortal } from './views/admin/AdminPortal';
 import { store } from './services/store';
 import { metaPixel } from './services/metaPixel';
+import { TopLoadingBar, PageSkeleton } from './components/PageLoading';
 import { CartItem, Product } from './types';
 
 export default function App() {
@@ -26,24 +27,25 @@ export default function App() {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [directBuyItem, setDirectBuyItem] = useState<CartItem | null>(null);
-  const [isInitialLoading, setIsInitialLoading] = useState<boolean>(() => {
-    return store.getProducts().length === 0 && !store.getHasInitialSyncCompleted();
-  });
+  // Real data (products, prices, settings) comes from the database. Until it has arrived we show a loading bar
+  // and placeholders, so customers never see old data that suddenly changes a few seconds later.
+  const [isDataLoading, setIsDataLoading] = useState<boolean>(() => !store.getProductsSynced());
 
   // Subscribe to store updates & initial sync completion
   useEffect(() => {
     const handleStoreChange = () => {
       setCartItems(store.getCart());
-      if (store.getHasInitialSyncCompleted() || store.getProducts().length > 0) {
-        setIsInitialLoading(false);
+      if (store.getProductsSynced()) {
+        setIsDataLoading(false);
       }
     };
     const unsubscribe = store.subscribe(handleStoreChange);
+    handleStoreChange();
 
-    // Fast failsafe timeout to dismiss loader in < 700ms
+    // Safety: if the database is unreachable, stop waiting after 20 seconds and show what this browser has
     const timeout = setTimeout(() => {
-      setIsInitialLoading(false);
-    }, 700);
+      setIsDataLoading(false);
+    }, 20000);
 
     return () => {
       unsubscribe();
@@ -246,33 +248,20 @@ export default function App() {
   };
 
   const isAdminView = currentPath.startsWith('/admin');
+  // Pages that do not need products from the database can open instantly
+  const isStaticPage =
+    currentPath === '/craftsmanship' ||
+    currentPath === '/lookbook' ||
+    currentPath === '/capsules' ||
+    currentPath.startsWith('/legal/') ||
+    ['/advance-courier-policy', '/deposit-policy', '/privacy-policy', '/privacy', '/terms', '/terms-and-conditions'].includes(currentPath);
+  const needsDatabaseData = !isAdminView && !isStaticPage;
+  const isProductPath = currentPath.startsWith('/products/') || currentPath.startsWith('/product/');
 
   return (
     <div className="min-h-screen flex flex-col bg-[#FAF9F7] text-neutral-900 selection:bg-[#800000] selection:text-white pb-16 md:pb-0">
-      {/* Luxury Initial Sync / Refresh Overlay (prevents any visual price jumps) */}
-      {isInitialLoading && !isAdminView && (
-        <div className="fixed inset-0 z-100 flex flex-col items-center justify-center bg-white/95 backdrop-blur-xs transition-opacity duration-300">
-          <div className="text-center space-y-4 px-6 max-w-sm">
-            <img
-              src="/assets/aistudio/hydee_wordmark_transparent.png"
-              alt="HYDEE"
-              className="h-10 sm:h-12 w-auto mx-auto object-contain"
-            />
-            <div className="space-y-1">
-              <span className="text-[10px] uppercase tracking-widest text-[#800000] font-bold block">
-                Atelier Women Collection · Tangail
-              </span>
-              <p className="text-xs text-neutral-500 font-medium">
-                Loading bespoke collections...
-              </p>
-            </div>
-            {/* Elegant indeterminate progress bar */}
-            <div className="w-48 h-1 bg-neutral-200 rounded-full mx-auto overflow-hidden relative">
-              <div className="absolute top-0 bottom-0 left-0 bg-[#800000] w-1/2 rounded-full animate-pulse" />
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Loading bar while the database is answering */}
+      {isDataLoading && !isAdminView && <TopLoadingBar />}
 
       {/* Header only for public store views */}
       {!isAdminView && (
@@ -286,7 +275,13 @@ export default function App() {
       )}
 
       {/* Main Content Area */}
-      <main className="flex-1">{renderCurrentView()}</main>
+      <main className="flex-1">
+        {isDataLoading && needsDatabaseData ? (
+          <PageSkeleton variant={isProductPath ? 'product' : 'grid'} />
+        ) : (
+          renderCurrentView()
+        )}
+      </main>
 
       {/* Footer only for public store views */}
       {!isAdminView && <Footer onNavigate={navigate} />}
