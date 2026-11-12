@@ -105,6 +105,8 @@ class StoreService {
   private listeners: Set<() => void> = new Set();
   public isSyncing: boolean = false;
   public hasInitialSyncCompleted: boolean = false;
+  // true as soon as categories, settings and products have been loaded from Supabase (orders may still load)
+  public productsSynced: boolean = false;
 
   constructor() {
     this.loadFromStorage();
@@ -113,7 +115,12 @@ class StoreService {
       this.syncFromSupabase();
     } else {
       this.hasInitialSyncCompleted = true;
+      this.productsSynced = true;
     }
+  }
+
+  public getProductsSynced(): boolean {
+    return this.productsSynced;
   }
 
   public getIsSyncing(): boolean {
@@ -355,6 +362,7 @@ class StoreService {
   async syncFromSupabase() {
     if (!isSupabaseConfigured || !supabase) {
       this.hasInitialSyncCompleted = true;
+      this.productsSynced = true;
       return;
     }
     this.isSyncing = true;
@@ -407,42 +415,68 @@ class StoreService {
           .map((r: any) => r.id as string);
 
         const previousProducts: Product[] = [...this.products];
-        const loaded: Product[] = [];
-        const BATCH_SIZE = 2;
-        let anyBatchFailed = false;
+        const BATCH_SIZE = 2; // heavy rows (big images) are fetched 2 at a time so none of them times out
+        const CONCURRENCY = 3; // ...but 3 requests run at the same time to load faster
+        const sb = supabase;
 
+        const batches: string[][] = [];
         for (let i = 0; i < activeIds.length; i += BATCH_SIZE) {
-          const batchIds = activeIds.slice(i, i + BATCH_SIZE);
-          const { data: rows, error: batchError } = await supabase
-            .from('products')
-            .select('*')
-            .in('id', batchIds);
+          batches.push(activeIds.slice(i, i + BATCH_SIZE));
+        }
 
-          if (batchError) {
-            anyBatchFailed = true;
+        const mapRows = (rows: any[], ids: string[]): Product[] =>
+          rows
+            .map((p: any) => {
+              const prev = previousProducts.find((ep) => ep.id === p.id || ep.slug === p.slug);
+              return this.normalizeProductPrices(this.mapSupabaseProduct(p, prev));
+            })
+            .sort((a, b) => ids.indexOf(a.id) - ids.indexOf(b.id));
+
+        const fetchBatch = async (ids: string[]): Promise<Product[]> => {
+          for (let attempt = 0; attempt < 2; attempt++) {
+            const { data: rows, error: batchError } = await sb.from('products').select('*').in('id', ids);
+            if (!batchError) return mapRows(rows || [], ids);
             console.error('Supabase products batch error:', batchError.message, batchError.details);
-            continue;
+            await new Promise((r) => setTimeout(r, 400));
           }
+          // The pair keeps failing (one very heavy row?). Try each product alone so one bad row cannot hide its neighbour.
+          const single: Product[] = [];
+          if (ids.length > 1) {
+            for (const id of ids) {
+              const { data: rows, error: oneError } = await sb.from('products').select('*').eq('id', id);
+              if (!oneError) single.push(...mapRows(rows || [], ids));
+              else console.error(`Supabase product ${id} could not be loaded:`, oneError.message);
+            }
+          }
+          return single;
+        };
 
-          (rows || []).forEach((p: any) => {
-            const prev = previousProducts.find((ep) => ep.id === p.id || ep.slug === p.slug);
-            loaded.push(this.normalizeProductPrices(this.mapSupabaseProduct(p, prev)));
+        const results: Product[][] = new Array(batches.length).fill(null).map(() => []);
+        for (let g = 0; g < batches.length; g += CONCURRENCY) {
+          const group = batches.slice(g, g + CONCURRENCY);
+          const groupResults = await Promise.all(group.map((ids) => fetchBatch(ids)));
+          groupResults.forEach((r, k) => {
+            results[g + k] = r;
           });
-
-          // Show what we have so far right away (progressive loading)
-          this.products = [...loaded];
-          this.notify();
         }
 
-        if (activeIds.length === 0 || !anyBatchFailed) {
-          this.products = loaded;
-        }
+        const loaded: Product[] = results.flat();
+        const loadedIds = new Set(loaded.map((p) => p.id));
+        const failedIds = activeIds.filter((id) => !loadedIds.has(id));
+
+        // A batch that failed twice keeps the version this browser already had (never lose a product)
+        const keptFromCache = previousProducts.filter((pp) => failedIds.includes(pp.id));
+        this.products = [...loaded, ...keptFromCache];
 
         saveAllProductsIDB(this.products).catch(() => {});
         try {
           localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(this.products));
         } catch (e) {}
       }
+
+      // Categories, settings and products are ready: the storefront can show real data now
+      this.productsSynced = true;
+      this.notify();
 
       // 3. Fetch Orders
       const { data: orderData, error: orderError } = await supabase
@@ -489,6 +523,7 @@ class StoreService {
     } finally {
       this.isSyncing = false;
       this.hasInitialSyncCompleted = true;
+      this.productsSynced = true;
       this.notify();
     }
   }
