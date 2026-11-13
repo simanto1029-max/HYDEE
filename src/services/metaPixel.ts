@@ -149,7 +149,22 @@ class MetaPixelService {
       const state = fbq && typeof fbq.getState === 'function' ? fbq.getState() : null;
       if (state && Array.isArray(state.pixels)) pixelsInitialized = state.pixels.map((p: any) => String(p.id));
     } catch (e) {}
+    // What the BROWSER really did on the network (works even when we cannot see Facebook's side)
+    let scriptRequestSeen = false;
+    let scriptHttpStatus: number | null = null;
+    let trackingRequestsSeen = 0;
+    try {
+      const entries: any[] = (typeof performance !== 'undefined' && performance.getEntriesByType('resource')) || [];
+      const lib = entries.find((e) => /connect\.facebook\.net\/.*fbevents\.js/.test(e.name));
+      scriptRequestSeen = Boolean(lib);
+      scriptHttpStatus = lib && typeof lib.responseStatus === 'number' && lib.responseStatus > 0 ? lib.responseStatus : null;
+      trackingRequestsSeen = entries.filter((e) => /facebook\.com\/tr[\/?]/.test(e.name)).length;
+    } catch (e) {}
+
     return {
+      scriptRequestSeen,
+      scriptHttpStatus,
+      trackingRequestsSeen,
       snippetInPage: Boolean(w.__hydeePixelBootId),
       bootPixelId: w.__hydeePixelBootId ? String(w.__hydeePixelBootId) : null,
       activePixelId: this.initializedId,
