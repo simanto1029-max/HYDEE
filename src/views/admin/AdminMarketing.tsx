@@ -21,6 +21,7 @@ export const AdminMarketing: React.FC = () => {
   const [pixelEvents, setPixelEvents] = useState<PixelEventPayload[]>(metaPixel.getRecentEvents());
   const [coupons, setCoupons] = useState<Coupon[]>(store.getCoupons());
   const [savedNotice, setSavedNotice] = useState<string | null>(null);
+  const [pixelStatus, setPixelStatus] = useState<ReturnType<typeof metaPixel.getConnectionStatus> | null>(null);
 
   // New coupon form state
   const [showAddCoupon, setShowAddCoupon] = useState(false);
@@ -432,6 +433,43 @@ export const AdminMarketing: React.FC = () => {
             </button>
           </div>
         </form>
+
+        {/* Connection check: is the Facebook Pixel really running in THIS browser? */}
+        <div className="border border-neutral-200 rounded-xl p-4 space-y-3 text-xs">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="font-bold text-neutral-900">Check Pixel connection</p>
+              <p className="text-[11px] text-neutral-500">
+                Tests whether the Facebook script really runs in this browser (turn OFF ad-blockers and privacy extensions first).
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setPixelStatus(metaPixel.getConnectionStatus())}
+              className="bg-neutral-900 text-white px-4 py-2.5 rounded-xl font-semibold cursor-pointer"
+            >
+              Check now
+            </button>
+          </div>
+
+          {pixelStatus && (
+            <ul className="space-y-1.5 text-[11px]">
+              <li>{pixelStatus.snippetInPage ? '✅' : '❌'} Pixel base code is in the website page (index.html){pixelStatus.bootPixelId ? ` — ID ${pixelStatus.bootPixelId}` : ''}</li>
+              <li>{pixelStatus.scriptLoaded ? '✅' : '❌'} Facebook script (fbevents.js) loaded in this browser{!pixelStatus.scriptLoaded ? ' — it is blocked or still loading: disable ad-blocker / Brave shields, reload the page, check again' : ''}</li>
+              <li>
+                {pixelStatus.pixelsInitialized.length > 0 ? '✅' : '⚠️'} Pixel ID(s) running now:{' '}
+                {pixelStatus.pixelsInitialized.length > 0 ? pixelStatus.pixelsInitialized.join(', ') : 'not known yet (the script may still be loading)'}
+              </li>
+              {settings.metaPixelId &&
+                pixelStatus.bootPixelId &&
+                settings.metaPixelId.replace(/\D/g, '') !== pixelStatus.bootPixelId && (
+                  <li className="text-amber-700">
+                    ⚠️ The ID saved above ({settings.metaPixelId}) is different from the ID in index.html ({pixelStatus.bootPixelId}). Events will be sent to BOTH pixels.
+                  </li>
+                )}
+            </ul>
+          )}
+        </div>
 
         {/* Live Event Stream Table */}
         <div className="border border-neutral-200 rounded-xl overflow-hidden">
