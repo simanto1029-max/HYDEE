@@ -14,12 +14,27 @@ class MetaPixelService {
   private initializedId: string | null = null;
   private pending: { eventName: string; data?: Record<string, any>; eventId: string }[] = [];
 
+  constructor() {
+    // index.html already started the Pixel (official base code): events can be sent straight away
+    if (typeof window !== 'undefined' && (window as any).__hydeePixelBootId) {
+      this.initializedId = String((window as any).__hydeePixelBootId);
+    }
+  }
+
   // Safe to call many times (page start, after settings arrive from Supabase, after admin saves).
   init(pixelId?: string) {
     if (typeof window === 'undefined') return;
 
     const id = String(pixelId || '').replace(/\D/g, '');
-    if (!id || this.initializedId === id) return;
+    if (!id) return;
+
+    // Same Pixel as the one in index.html: nothing to start again, only send what was waiting
+    if (this.initializedId === id || (window as any).__hydeePixelBootId === id) {
+      this.initializedId = id;
+      const waiting = this.pending.splice(0, this.pending.length);
+      waiting.forEach((e) => (window as any).fbq('track', e.eventName, e.data, { eventID: e.eventId }));
+      return;
+    }
 
     if (!(window as any).fbq) {
       /* eslint-disable */
@@ -65,6 +80,13 @@ class MetaPixelService {
 
     this.eventsLog.unshift(logEntry);
     if (this.eventsLog.length > 50) this.eventsLog.pop();
+
+    // index.html already sent the PageView of the very first page load: do not count it twice
+    if (eventName === 'PageView' && typeof window !== 'undefined' && (window as any).__hydeeBootPageViewSent) {
+      (window as any).__hydeeBootPageViewSent = false;
+      window.dispatchEvent(new CustomEvent('hydee_pixel_event', { detail: logEntry }));
+      return;
+    }
 
     // Call browser fbq if the Pixel is ready; otherwise keep the event until the Pixel ID arrives
     if (typeof window !== 'undefined' && (window as any).fbq && this.initializedId) {
@@ -116,6 +138,27 @@ class MetaPixelService {
       },
       `purch_${orderNumber}`
     );
+  }
+
+  // Used by the admin "Check connection" button
+  getConnectionStatus() {
+    const w: any = typeof window !== 'undefined' ? window : {};
+    const fbq = w.fbq;
+    let pixelsInitialized: string[] = [];
+    try {
+      const state = fbq && typeof fbq.getState === 'function' ? fbq.getState() : null;
+      if (state && Array.isArray(state.pixels)) pixelsInitialized = state.pixels.map((p: any) => String(p.id));
+    } catch (e) {}
+    return {
+      snippetInPage: Boolean(w.__hydeePixelBootId),
+      bootPixelId: w.__hydeePixelBootId ? String(w.__hydeePixelBootId) : null,
+      activePixelId: this.initializedId,
+      fbqExists: typeof fbq === 'function',
+      // the real Facebook script replaces the small starter function: if this is false the script did not load
+      scriptLoaded: Boolean(fbq && typeof fbq.callMethod === 'function'),
+      pixelsInitialized,
+      eventsSeenByThisPage: this.eventsLog.length,
+    };
   }
 
   getRecentEvents(): PixelEventPayload[] {
