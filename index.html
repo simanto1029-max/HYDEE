@@ -13,12 +13,31 @@
     <link rel="apple-touch-icon" href="/assets/aistudio/hydee_logo_5113452b.png" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="theme-color" content="#800000" />
+    <!-- Meta Pixel Code (base code in <head>, as Meta's setup wizard expects). Dataset: HYDEE -->
+    <script>
+      !function(f,b,e,v,n,t,s)
+      {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+      n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+      if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+      n.queue=[];t=b.createElement(e);t.async=!0;
+      t.src=v;s=b.getElementsByTagName(e)[0];
+      s.parentNode.insertBefore(t,s)}(window, document,'script',
+      'https://connect.facebook.net/en_US/fbevents.js');
+      fbq('init', '28357253923950084');
+      fbq('track', 'PageView');
+      // tells the shop code that the Pixel is already running (so it does not start it a second time)
+      window.__hydeePixelBootId = '28357253923950084';
+      window.__hydeeBootPageViewSent = true;
+    </script>
+    <!-- End Meta Pixel Code -->
     <!-- Google Fonts: Cormorant Garamond, Inter & Hind Siliguri -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600&family=Hind+Siliguri:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   </head>
   <body class="bg-white text-neutral-900 antialiased selection:bg-[#800000] selection:text-white">
+    <!-- Meta Pixel (no-JavaScript fallback) -->
+    <noscript><img height="1" width="1" style="display:none" src="https://www.facebook.com/tr?id=28357253923950084&ev=PageView&noscript=1" /></noscript>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
