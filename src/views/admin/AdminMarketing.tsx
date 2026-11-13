@@ -455,6 +455,18 @@ export const AdminMarketing: React.FC = () => {
           {pixelStatus && (
             <ul className="space-y-1.5 text-[11px]">
               <li>{pixelStatus.snippetInPage ? '✅' : '❌'} Pixel base code is in the website page (index.html){pixelStatus.bootPixelId ? ` — ID ${pixelStatus.bootPixelId}` : ''}</li>
+              <li>
+                {pixelStatus.scriptRequestSeen ? '✅' : '❌'} Browser asked Facebook for the Pixel script (connect.facebook.net){' '}
+                {pixelStatus.scriptRequestSeen
+                  ? pixelStatus.scriptHttpStatus
+                    ? `— answer HTTP ${pixelStatus.scriptHttpStatus}`
+                    : '— answered'
+                  : '— NO request was made: an ad-blocker / privacy extension / network filter is blocking Facebook on this device'}
+              </li>
+              <li>
+                {pixelStatus.trackingRequestsSeen > 0 ? '✅' : '❌'} Events actually sent to Facebook from this page: {pixelStatus.trackingRequestsSeen}
+                {pixelStatus.trackingRequestsSeen === 0 ? ' — nothing left this browser. Reload the page, wait 5 seconds, press Check now again.' : ''}
+              </li>
               <li>{pixelStatus.scriptLoaded ? '✅' : '❌'} Facebook script (fbevents.js) loaded in this browser{!pixelStatus.scriptLoaded ? ' — it is blocked or still loading: disable ad-blocker / Brave shields, reload the page, check again' : ''}</li>
               <li>
                 {pixelStatus.pixelsInitialized.length > 0 ? '✅' : '⚠️'} Pixel ID(s) running now:{' '}
