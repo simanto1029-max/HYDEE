@@ -15,6 +15,7 @@ import {
   FolderOpen,
 } from 'lucide-react';
 import { store } from '../../services/store';
+import { compressImageFile, storeImageDataUrl, isDataUrl } from '../../services/imageStorage';
 import { Category, Product } from '../../types';
 
 export const AdminCategories: React.FC = () => {
@@ -30,6 +31,9 @@ export const AdminCategories: React.FC = () => {
   const [formSlug, setFormSlug] = useState('');
   const [formDescription, setFormDescription] = useState('');
   const [formImageUrl, setFormImageUrl] = useState('');
+  const [isUploadingCover, setIsUploadingCover] = useState(false);
+  const [coverMessage, setCoverMessage] = useState<{ type: 'ok' | 'warn' | 'error'; text: string } | null>(null);
+  const [coverBroken, setCoverBroken] = useState(false);
   const [formDisplayOrder, setFormDisplayOrder] = useState<number>(1);
 
   // Category Deletion Modal
@@ -58,6 +62,8 @@ export const AdminCategories: React.FC = () => {
     setFormDescription('');
     setFormImageUrl('https://images.unsplash.com/photo-1610030469983-98e550d6193c?auto=format&fit=crop&w=800&q=80');
     setFormDisplayOrder(categories.length + 1);
+    setCoverMessage(null);
+    setCoverBroken(false);
     setIsModalOpen(true);
   };
 
@@ -67,8 +73,37 @@ export const AdminCategories: React.FC = () => {
     setFormSlug(cat.slug);
     setFormDescription(cat.description || '');
     setFormImageUrl(cat.imageUrl);
+    setCoverMessage(null);
+    setCoverBroken(false);
     setFormDisplayOrder(cat.displayOrder);
     setIsModalOpen(true);
+  };
+
+  const handleCoverFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setCoverMessage({ type: 'error', text: 'Please choose a picture file (JPG, PNG, WebP).' });
+      return;
+    }
+    setIsUploadingCover(true);
+    setCoverMessage(null);
+    setCoverBroken(false);
+    try {
+      const compressed = await compressImageFile(file);
+      if (!compressed) throw new Error('This picture could not be read.');
+      const stored = await storeImageDataUrl(compressed);
+      setFormImageUrl(stored.url);
+      setCoverMessage(
+        stored.warning
+          ? { type: 'warn', text: stored.warning }
+          : { type: 'ok', text: 'Picture uploaded. Press "Update Category" to save.' }
+      );
+    } catch (err: any) {
+      setCoverMessage({ type: 'error', text: err?.message || 'Upload failed. Please try again.' });
+    }
+    setIsUploadingCover(false);
   };
 
   const handleSaveCategory = (e: React.FormEvent) => {
@@ -333,19 +368,75 @@ export const AdminCategories: React.FC = () => {
               </div>
 
               <div>
-                <label className="block font-bold text-neutral-800 mb-1">
-                  Cover Image URL
-                </label>
-                <input
-                  type="url"
-                  placeholder="https://images.unsplash.com/..."
-                  value={formImageUrl}
-                  onChange={(e) => setFormImageUrl(e.target.value)}
-                  className="w-full p-3 border border-neutral-300 rounded-xl focus:border-[#800000] focus:outline-hidden font-mono text-[11px]"
-                />
+                <label className="block font-bold text-neutral-800 mb-1">Cover Picture</label>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <label
+                    className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold cursor-pointer transition-colors ${
+                      isUploadingCover ? 'bg-neutral-200 text-neutral-500' : 'bg-[#800000] text-white hover:bg-[#6b0000]'
+                    }`}
+                  >
+                    <Upload className="w-4 h-4" />
+                    {isUploadingCover ? 'Uploading…' : 'Upload picture from this device'}
+                    <input type="file" accept="image/*" onChange={handleCoverFile} disabled={isUploadingCover} className="hidden" />
+                  </label>
+                  {formImageUrl && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormImageUrl('');
+                        setCoverMessage(null);
+                        setCoverBroken(false);
+                      }}
+                      className="px-3 py-2.5 rounded-xl border border-neutral-300 text-xs font-semibold text-neutral-700 hover:bg-neutral-50 cursor-pointer"
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+
+                {coverMessage && (
+                  <p
+                    className={`mt-2 text-[11px] font-semibold ${
+                      coverMessage.type === 'ok' ? 'text-emerald-700' : coverMessage.type === 'warn' ? 'text-amber-700' : 'text-red-700'
+                    }`}
+                  >
+                    {coverMessage.text}
+                  </p>
+                )}
+
+                <p className="mt-3 mb-1 text-[11px] text-neutral-500">Or paste a picture link:</p>
+                {isDataUrl(formImageUrl) ? (
+                  <p className="p-3 border border-neutral-200 rounded-xl bg-neutral-50 text-[11px] text-neutral-600">
+                    A picture you uploaded is attached (not a link). Use "Remove" to choose another one.
+                  </p>
+                ) : (
+                  <input
+                    type="text"
+                    placeholder="https://..."
+                    value={formImageUrl}
+                    onChange={(e) => {
+                      setFormImageUrl(e.target.value);
+                      setCoverBroken(false);
+                    }}
+                    className="w-full p-3 border border-neutral-300 rounded-xl focus:border-[#800000] focus:outline-hidden font-mono text-[11px]"
+                  />
+                )}
+
                 {formImageUrl && (
-                  <div className="mt-2 h-24 rounded-xl overflow-hidden bg-neutral-100 border border-neutral-200">
-                    <img src={formImageUrl} alt="Preview" className="w-full h-full object-cover" />
+                  <div className="mt-2 h-28 rounded-xl overflow-hidden bg-neutral-100 border border-neutral-200 flex items-center justify-center">
+                    {coverBroken ? (
+                      <p className="px-4 text-center text-[11px] text-red-700 font-semibold">
+                        This link's picture can not be shown (many websites block it). Please upload the picture from your device instead.
+                      </p>
+                    ) : (
+                      <img
+                        src={formImageUrl}
+                        alt="Preview"
+                        onError={() => setCoverBroken(true)}
+                        className="w-full h-full object-cover"
+                      />
+                    )}
                   </div>
                 )}
               </div>
