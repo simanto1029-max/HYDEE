@@ -73,3 +73,41 @@ export async function replaceDataUrlsWithStorageLinks<T>(
   }
   return value;
 }
+
+// Shrinks a photo picked from the phone / computer (max 1200px wide, JPEG 82%): the quality stays good, the file stays small.
+export const compressImageFile = (file: File, maxWidth = 1200, quality = 0.82): Promise<string> =>
+  new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const original = String(e.target?.result || '');
+      const img = new Image();
+      img.onload = () => {
+        const scale = img.width > maxWidth ? maxWidth / img.width : 1;
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return resolve(original);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.onerror = () => resolve(original);
+      img.src = original;
+    };
+    reader.onerror = () => resolve('');
+    reader.readAsDataURL(file);
+  });
+
+// Saves a picture in fast image storage. If storage is not set up yet, the picture is still kept (embedded) so nothing is lost.
+export async function storeImageDataUrl(dataUrl: string): Promise<{ url: string; warning?: string }> {
+  if (!isDataUrl(dataUrl)) return { url: dataUrl };
+  if (!isSupabaseConfigured || !supabase) return { url: dataUrl };
+  try {
+    return { url: await uploadDataUrlToStorage(dataUrl) };
+  } catch (err: any) {
+    return {
+      url: dataUrl,
+      warning: `${err?.message || 'Upload failed.'} The picture was still added, but it makes the website slower until image storage is set up.`,
+    };
+  }
+}
