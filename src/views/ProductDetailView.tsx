@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowRight, Check, MessageCircle, ShoppingBag } from 'lucide-react';
+import { ArrowRight, Check, ShoppingBag } from 'lucide-react';
+import { TrustBadgeStrip } from '../components/TrustBadgeStrip';
+import { buildTiers, isBundleEnabled, isTierFreeShipping } from '../services/pricing';
 import { ProductCard } from '../components/ProductCard';
 import { store } from '../services/store';
 import { metaPixel } from '../services/metaPixel';
@@ -133,66 +135,14 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
   const distinctStock = selectedVariant?.stock ?? product.stock ?? (((seed * 7) % 15) + 3);
   const isOutOfStock = distinctStock <= 0;
 
-  // Build bundle tiers
-  const defaultTiers: BundleTier[] = [
-    {
-      quantity: 1,
-      label: 'Buy 1',
-      subtitle: 'Standard Edition',
-      price: unitPrice,
-    },
-    {
-      quantity: 2,
-      label: 'Buy 2',
-      subtitle: 'Save 10% Extra',
-      badge: 'Most Popular',
-      price: Math.round(unitPrice * 2 * 0.9),
-      freeShipping: false,
-    },
-    {
-      quantity: 3,
-      label: 'Buy 3',
-      subtitle: 'Save 20% Extra + Free Delivery',
-      price: Math.round(unitPrice * 3 * 0.8),
-      freeShipping: true,
-    },
-  ];
-
-  const activeTiers = (() => {
-    const rawTiers = (product.bundleTiers && product.bundleTiers.length > 0)
-      ? product.bundleTiers
-      : defaultTiers;
-
-    return rawTiers.map((t, idx) => {
-      if (idx === 0) {
-        return { ...t, price: unitPrice };
-      }
-      if (idx === 1 && (!t.price || t.price > unitPrice * 3 || t.price < unitPrice)) {
-        return { ...t, price: Math.round(unitPrice * 2 * 0.9) };
-      }
-      if (idx === 2 && (!t.price || t.price > unitPrice * 4 || t.price < unitPrice)) {
-        return { ...t, price: Math.round(unitPrice * 3 * 0.8) };
-      }
-      return t;
-    });
-  })();
+  // Buy 1 / Buy 2 / Buy 3 (same logic the cart and the order use: see services/pricing.ts)
+  const bundleOn = isBundleEnabled(product);
+  const activeTiers = bundleOn ? buildTiers(product, unitPrice) : buildTiers(product, unitPrice).slice(0, 1);
 
   const currentTier = activeTiers[selectedTierIndex] || activeTiers[0];
-  const tierQuantity = currentTier.quantity;
-  const tierTotalPrice = selectedTierIndex === 0 ? unitPrice : (currentTier.price ?? (unitPrice * tierQuantity));
+  const tierQuantity = bundleOn ? currentTier.quantity : 1;
+  const tierTotalPrice = selectedTierIndex === 0 || !bundleOn ? unitPrice : (currentTier.price ?? (unitPrice * tierQuantity));
   const effectiveUnitPrice = Math.round(tierTotalPrice / tierQuantity);
-
-  const isTierFreeShipping = (t: BundleTier) => {
-    // The admin's Free Delivery tick is the single source of truth (so Buy 3 can also be switched off)
-    if (typeof t.freeShipping === 'boolean') return t.freeShipping;
-    // Very old products without the tick: keep the previous guessing behaviour
-    return Boolean(
-      t.freeShipping ||
-      t.subtitle?.toLowerCase().includes('free delivery') ||
-      t.subtitle?.includes('ফ্রি ডেলিভারি') ||
-      t.quantity >= 3
-    );
-  };
 
   // Extract unique colors for interactive color circles
   const colorMap = new Map<string, { color: string; colorHex?: string; variantId: string }>();
@@ -216,17 +166,6 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
 
   const handleBuyNowClick = () => {
     onBuyNow(product, selectedVariant?.id, tierQuantity, effectiveUnitPrice, isTierFreeShipping(currentTier));
-  };
-
-  const handleWhatsAppOrder = () => {
-    const settings = store.getSettings();
-    const cleanNumber = (settings.whatsappNumber || '8801601705804').replace(/[^0-9]/g, '') || '8801601705804';
-    const sizeText = product.hasSizes !== false && selectedVariant?.size && selectedVariant.size !== 'Free Size' ? `\n• Size: ${selectedVariant.size}` : '';
-    const colorText = selectedVariant?.color ? `\n• Color: ${selectedVariant.color}` : '';
-    const freeShipText = isTierFreeShipping(currentTier) ? ' (Free Delivery 🎉)' : '';
-    const message = `Hello HYDEE! I would like to place an order for:\n\n✨ Product: ${product.name}${sizeText}${colorText}\n📦 Quantity: ${tierQuantity} item(s) (${currentTier.label})\n💰 Total Price: ৳${tierTotalPrice.toLocaleString()}${freeShipText}\n\nProduct Link: ${window.location.origin}/products/${product.slug}`;
-    const url = `https://wa.me/${cleanNumber}?text=${encodeURIComponent(message)}`;
-    window.open(url, '_blank');
   };
 
   return (
@@ -433,70 +372,69 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
             )}
 
             {/* ========================================================
-                QUANTITY BUNDLE OFFERS (Screenshot 3 Style)
+                QUANTITY BUNDLE OFFERS (admin: Products > edit > Quantity Bundle Offers)
                ======================================================== */}
-            <div className="pt-1 space-y-2.5">
+            {bundleOn && (
+              <div className="pt-1 space-y-2.5">
+                {/* Tier Cards (Buy 1 / Buy 2 / Buy 3) */}
+                <div className="space-y-2">
+                  {activeTiers.map((tier, idx) => {
+                    const isSelected = selectedTierIndex === idx;
+                    const displayTierPrice = idx === 0 ? unitPrice : (tier.price ?? (unitPrice * tier.quantity));
+                    const regularTierPrice = (currentCompareAt || unitPrice) * tier.quantity;
 
-              {/* Tier Cards (Buy 1 / Buy 2 / Buy 3) */}
-              <div className="space-y-2">
-                {activeTiers.map((tier, idx) => {
-                  const isSelected = selectedTierIndex === idx;
-                  const displayTierPrice = idx === 0 ? unitPrice : (tier.price ?? (unitPrice * tier.quantity));
-                  const regularTierPrice = (currentCompareAt || unitPrice) * tier.quantity;
-
-                  return (
-                    <div
-                      key={idx}
-                      onClick={() => setSelectedTierIndex(idx)}
-                      className={`relative rounded-xl p-3 sm:p-3.5 flex items-center justify-between cursor-pointer transition-all ${
-                        isSelected
-                          ? 'border-2 border-[#800000] bg-[#800000]/[0.03] shadow-xs'
-                          : 'border border-neutral-300 bg-white hover:border-neutral-400'
-                      }`}
-                    >
-                      {/* Pill Badge (e.g. "Most Popular") in HYDEE Maroon */}
-                      {tier.badge && (
-                        <span className="absolute -top-2.5 right-4 bg-[#800000] text-white text-[10px] font-bold px-2.5 py-0.5 rounded-full tracking-tight shadow-xs">
-                          {tier.badge}
-                        </span>
-                      )}
-
-                      {/* Left: Buy X + Subtitle + Free Delivery tag if configured */}
-                      <div>
-                        <div className="font-bold text-sm text-black">
-                          {tier.label}
-                        </div>
-                        {tier.subtitle && (
-                          <div className="text-[11px] text-neutral-700 font-normal mt-0.5">
-                            {tier.subtitle}
-                          </div>
+                    return (
+                      <div
+                        key={idx}
+                        onClick={() => setSelectedTierIndex(idx)}
+                        className={`relative rounded-xl p-3 sm:p-3.5 flex items-center justify-between cursor-pointer transition-all ${
+                          isSelected
+                            ? 'border-2 border-[#800000] bg-[#800000]/[0.03] shadow-xs'
+                            : 'border border-neutral-300 bg-white hover:border-neutral-400'
+                        }`}
+                      >
+                        {tier.badge && (
+                          <span className="absolute -top-2.5 right-4 bg-[#800000] text-white text-[10px] font-bold px-2.5 py-0.5 rounded-full tracking-tight shadow-xs">
+                            {tier.badge}
+                          </span>
                         )}
-                        {isTierFreeShipping(tier) && (
-                          <div className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md mt-1 border border-emerald-200">
-                            <Check className="w-3 h-3 stroke-[3]" />
-                            <span>Free Delivery (ফ্রি ডেলিভারি)</span>
-                          </div>
-                        )}
-                      </div>
 
-                      {/* Right: Package Price (Smaller text) + Regular Price underneath */}
-                      <div className="text-right">
-                        <div className="font-bold text-sm sm:text-[15px] text-black">
-                          ৳{displayTierPrice.toLocaleString()}
+                        {/* Left: "Buy 2  [Free Delivery]" then the small text under it */}
+                        <div>
+                          <div className="flex items-center flex-wrap gap-x-2 gap-y-1">
+                            <span className="font-bold text-sm text-black">{tier.label}</span>
+                            {isTierFreeShipping(tier) && tier.quantity > 1 && (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                                <Check className="w-3 h-3 stroke-[3]" />
+                                <span>Free Delivery</span>
+                              </span>
+                            )}
+                          </div>
+                          {tier.subtitle && (
+                            <div className="text-[11px] text-neutral-700 font-normal mt-0.5">
+                              {tier.subtitle}
+                            </div>
+                          )}
                         </div>
-                        <div className="text-[10px] text-neutral-500 font-normal mt-0.5">
-                          Regular: <span className="line-through text-neutral-400">৳{regularTierPrice.toLocaleString()}</span>
+
+                        <div className="text-right">
+                          <div className="font-bold text-sm sm:text-[15px] text-black">
+                            ৳{displayTierPrice.toLocaleString()}
+                          </div>
+                          <div className="text-[10px] text-neutral-500 font-normal mt-0.5">
+                            Regular: <span className="line-through text-neutral-400">৳{regularTierPrice.toLocaleString()}</span>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
-            </div>
+            )}
 
-            {/* Action Buttons: Order Now & Order Via WhatsApp */}
+            {/* Action Buttons: Add To Cart & Order Now */}
             <div className="space-y-2.5 pt-1">
-              {/* Order Now (Direct Checkout) */}
+              {/* Order Now (goes straight to checkout) */}
               <button
                 onClick={handleBuyNowClick}
                 disabled={isOutOfStock}
@@ -506,15 +444,19 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                 <ArrowRight className="w-4 h-4" />
               </button>
 
-              {/* Order Via WhatsApp (Replaces Add To Bag as requested) */}
+              {/* Add To Cart (goes to the cart page, where more products can be added) */}
               <button
                 type="button"
-                onClick={handleWhatsAppOrder}
-                className="w-full bg-[#25D366] hover:bg-[#20ba59] text-white text-xs sm:text-sm font-bold tracking-wider py-3.5 rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md active:scale-[0.99]"
+                onClick={handleAddToCartClick}
+                disabled={isOutOfStock}
+                className="w-full bg-white hover:bg-neutral-50 border-2 border-neutral-950 text-neutral-950 text-xs sm:text-sm font-bold tracking-wider py-3.5 rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 active:scale-[0.99]"
               >
-                <MessageCircle className="w-5 h-5 fill-white stroke-none" />
-                <span>Order Via WhatsApp</span>
+                <ShoppingBag className="w-4 h-4" />
+                <span>Add To Cart</span>
               </button>
+
+              {/* Cash on Delivery / Free Delivery / Trusted Store (admin: Offers & Badges) */}
+              <TrustBadgeStrip />
             </div>
 
             {/* Product Description Underneath Buttons (whitespace-pre-line preserves newlines & spaces) */}
