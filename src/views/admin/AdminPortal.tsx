@@ -6,6 +6,7 @@ import {
   Layers,
   Sparkles,
   Tag,
+  Gift,
   Settings,
   LogOut,
   ExternalLink,
@@ -20,13 +21,14 @@ import { AdminCategories } from './AdminCategories';
 import { AdminOrders } from './AdminOrders';
 import { AdminMarketing } from './AdminMarketing';
 import { AdminSettings } from './AdminSettings';
+import { AdminOffers } from './AdminOffers';
 
 interface AdminPortalProps {
   onNavigateHome: () => void;
   onNavigateToProduct: (slug: string) => void;
 }
 
-type AdminTabType = 'dashboard' | 'products' | 'categories' | 'orders' | 'marketing' | 'settings';
+type AdminTabType = 'dashboard' | 'products' | 'categories' | 'orders' | 'marketing' | 'offers' | 'settings';
 
 const getTabFromPath = (path: string): AdminTabType => {
   const clean = path.toLowerCase();
@@ -34,6 +36,7 @@ const getTabFromPath = (path: string): AdminTabType => {
   if (clean.includes('/admin/products')) return 'products';
   if (clean.includes('/admin/catalog') || clean.includes('/admin/categories')) return 'categories';
   if (clean.includes('/admin/promotional') || clean.includes('/admin/marketing') || clean.includes('/admin/pixel')) return 'marketing';
+  if (clean.includes('/admin/offers')) return 'offers';
   if (clean.includes('/admin/settings') || clean.includes('/admin/setting')) return 'settings';
   return 'dashboard';
 };
@@ -53,6 +56,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
       products: '/admin/products',
       categories: '/admin/catalog',
       marketing: '/admin/promotional',
+      offers: '/admin/offers',
       settings: '/admin/settings',
     };
     const target = slugMap[tab] || '/admin';
@@ -181,6 +185,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     { id: 'products', label: 'Products', icon: ShoppingBag },
     { id: 'categories', label: 'Catalog', icon: Layers },
     { id: 'marketing', label: 'Promotional & Pixel', icon: Tag },
+    { id: 'offers', label: 'Offers & Badges', icon: Gift },
     { id: 'settings', label: 'Settings', icon: Settings },
   ];
 
@@ -270,6 +275,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           {activeTab === 'categories' && <AdminCategories />}
           {activeTab === 'orders' && <AdminOrders />}
           {activeTab === 'marketing' && <AdminMarketing />}
+          {activeTab === 'offers' && <AdminOffers />}
           {activeTab === 'settings' && <AdminSettings />}
         </main>
       </div>
