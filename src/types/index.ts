@@ -18,6 +18,7 @@ export interface BundleTier {
   price?: number; // custom package price in BDT
   badge?: string; // e.g. "Most Popular"
   freeShipping?: boolean; // If true, free delivery is provided for this tier
+  bundleOff?: boolean; // set on the first tier only: admin switched the whole Buy 1/2/3 offer off for this product (kept inside the tiers JSON so no new database column is needed)
 }
 
 export interface ProductColorOption {
@@ -68,6 +69,7 @@ export interface Product {
   createdAt: string;
   updatedAt: string;
   manualRecommendationIds?: string[];
+  bundleEnabled?: boolean; // false = hide the Buy 1 / Buy 2 / Buy 3 box on this product (undefined = shown)
   bundleHeadline?: string; // e.g. "50% OFF TODAY ONLY"
   bundleTiers?: BundleTier[]; // Tiered bundle offers (Buy 1, Buy 2, Buy 3)
 }
@@ -128,6 +130,7 @@ export interface OrderItem {
   variantId: string;
   variantName: string;
   price: number;
+  lineTotal?: number; // exact line amount after Buy 2 / Buy 3 pricing (price x quantity can differ by a taka because of rounding)
   quantity: number;
   imageUrl: string;
 }
@@ -146,7 +149,10 @@ export interface Order {
   items: OrderItem[];
   subtotal: number;
   advanceDeliveryFee: number;
-  discountAmount: number;
+  discountAmount: number; // coupon + cart offer together
+  cartOfferDiscount?: number; // the part of discountAmount that came from "buy 2+ different products"
+  cartOfferLabel?: string;
+  freeDelivery?: boolean;
   discountCode?: string;
   totalAmount: number; // Subtotal + Delivery - Discount
   remainingCodAmount: number; // Total - Advance paid
@@ -211,6 +217,37 @@ export interface HeroSlide {
   order: number;
 }
 
+export type TrustBadgeIcon =
+  | 'banknote'
+  | 'truck'
+  | 'shield-check'
+  | 'badge-check'
+  | 'gift'
+  | 'clock'
+  | 'heart'
+  | 'star'
+  | 'package'
+  | 'lock'
+  | 'rotate-ccw'
+  | 'phone';
+
+// Small "Cash on Delivery / Free Delivery / Trusted Store" strip shown under the Order Now button
+export interface TrustBadge {
+  id: string;
+  icon: TrustBadgeIcon;
+  text: string;
+  enabled: boolean;
+}
+
+// "Buy 2 different products = 5% extra + free delivery" (counted on the cart page, admin editable)
+export interface CartOfferRule {
+  id: string;
+  minProducts: number; // number of DIFFERENT products in the cart
+  extraDiscountPercent: number; // 0 = no extra discount
+  freeDelivery: boolean;
+  enabled: boolean;
+}
+
 export interface SiteSettings {
   brandName: string;
   tagline: string;
@@ -234,6 +271,11 @@ export interface SiteSettings {
   announcementBarText?: string;
   announcementBarEnabled: boolean;
   supabaseConnected: boolean;
+  // Offers & trust strip (all editable from Admin > Offers & Badges)
+  trustBadgesEnabled?: boolean;
+  trustBadges?: TrustBadge[];
+  cartOffersEnabled?: boolean;
+  cartOffers?: CartOfferRule[];
 }
 
 export interface AuditLog {
