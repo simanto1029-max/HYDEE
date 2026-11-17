@@ -3,12 +3,12 @@ import { Header } from './components/Header';
 import { Footer } from './components/Footer';
 import { BottomNavBar } from './components/BottomNavBar';
 import { FloatingConcierge } from './components/FloatingConcierge';
-import { CartDrawer } from './components/CartDrawer';
 import { SearchModal } from './components/SearchModal';
 import { PromotionalPopup } from './components/PromotionalPopup';
 import { HomeView } from './views/HomeView';
 import { CategoryView } from './views/CategoryView';
 import { ProductDetailView } from './views/ProductDetailView';
+import { CartView } from './views/CartView';
 import { CheckoutView } from './views/CheckoutView';
 import { ThankYouView } from './views/ThankYouView';
 import { TrackOrderView } from './views/TrackOrderView';
@@ -24,9 +24,7 @@ import { CartItem, Product } from './types';
 export default function App() {
   const [currentPath, setCurrentPath] = useState<string>(window.location.pathname || '/');
   const [cartItems, setCartItems] = useState<CartItem[]>(store.getCart());
-  const [isCartOpen, setIsCartOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
-  const [directBuyItem, setDirectBuyItem] = useState<CartItem | null>(null);
   // Real data (products, prices, settings) comes from the database. Until it has arrived we show a loading bar
   // and placeholders, so customers never see old data that suddenly changes a few seconds later.
   const [isDataLoading, setIsDataLoading] = useState<boolean>(() => !store.getProductsSynced());
@@ -85,9 +83,10 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  // Add To Cart: put the product in the cart and open the cart page (customer can add more products there)
   const handleAddToCart = (product: Product, variantId?: string, quantity: number = 1, customUnitPrice?: number) => {
-    store.addToCart(product, variantId, quantity, customUnitPrice);
-    setIsCartOpen(true);
+    store.addToCart(product, variantId, quantity, customUnitPrice, 'add');
+    navigate('/cart');
 
     const effectivePrice = customUnitPrice !== undefined ? customUnitPrice : product.price;
     metaPixel.track('AddToCart', {
@@ -99,30 +98,26 @@ export default function App() {
     });
   };
 
+  // Order Now: the product goes into the cart (exactly this quantity) and the customer lands directly on checkout.
+  // Because it is the same cart, anything already added earlier is on the checkout bill too.
   const handleBuyNow = (
     product: Product,
     variantId?: string,
     quantity: number = 1,
     customUnitPrice?: number,
-    isFreeShipping?: boolean
+    _isFreeShipping?: boolean
   ) => {
-    const selectedVariant = product.variants.find((v) => v.id === variantId) || product.variants[0];
-    const price = customUnitPrice !== undefined ? customUnitPrice : (selectedVariant?.price || product.price);
-    const buyItem: CartItem = {
-      productId: product.id,
-      variantId: selectedVariant?.id || `v-${product.id}`,
-      name: product.name,
-      slug: product.slug,
-      imageUrl: product.images[0],
-      size: selectedVariant?.size || 'Free Size',
-      color: selectedVariant?.color || 'Default',
-      price,
-      quantity,
-      maxStock: selectedVariant?.stock || product.stock,
-      freeShipping: isFreeShipping,
-    };
-    setDirectBuyItem(buyItem);
+    store.addToCart(product, variantId, quantity, customUnitPrice, 'set');
     navigate('/checkout');
+
+    const effectivePrice = customUnitPrice !== undefined ? customUnitPrice : product.price;
+    metaPixel.track('AddToCart', {
+      content_name: product.name,
+      content_ids: [product.id, product.sku],
+      content_type: 'product',
+      value: effectivePrice * quantity,
+      currency: 'BDT',
+    });
   };
 
   // Route Dispatcher
@@ -144,14 +139,17 @@ export default function App() {
       return <ThankYouView orderNumber={orderNumber} onNavigate={navigate} />;
     }
 
-    // 3. Checkout
+    // 3a. Cart page (all added products, bill, offers, "add more products")
+    if (currentPath === '/cart') {
+      return <CartView items={cartItems} onNavigate={navigate} onAddToCart={handleAddToCart} />;
+    }
+
+    // 3b. Checkout
     if (currentPath === '/checkout') {
       return (
         <CheckoutView
           items={cartItems}
-          directBuyItem={directBuyItem}
           onNavigate={navigate}
-          onOrderConfirmed={() => setDirectBuyItem(null)}
           onClearCart={() => store.clearCart()}
         />
       );
@@ -268,7 +266,7 @@ export default function App() {
         <Header
           currentPath={currentPath}
           onNavigate={navigate}
-          onOpenCart={() => setIsCartOpen(true)}
+          onOpenCart={() => navigate('/cart')}
           onOpenSearch={() => setIsSearchOpen(true)}
           cartCount={cartItems.reduce((acc, i) => acc + i.quantity, 0)}
         />
@@ -298,21 +296,6 @@ export default function App() {
 
       {/* Floating VIP Stylist Concierge Widget (Hidden on checkout for clean mobile view) */}
       {!isAdminView && currentPath !== '/checkout' && <FloatingConcierge />}
-
-      {/* Slide-over Cart Drawer */}
-      <CartDrawer
-        isOpen={isCartOpen}
-        onClose={() => setIsCartOpen(false)}
-        items={cartItems}
-        onUpdateQuantity={(prodId, varId, qty) =>
-          store.updateCartQuantity(prodId, varId, qty)
-        }
-        onRemoveItem={(prodId, varId) => store.removeFromCart(prodId, varId)}
-        onProceedToCheckout={() => {
-          setDirectBuyItem(null);
-          navigate('/checkout');
-        }}
-      />
 
       {/* Luxury Search Overlay */}
       <SearchModal
