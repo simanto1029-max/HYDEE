@@ -15,33 +15,30 @@ import {
   Minus,
   ShieldCheck,
   Clock,
+  Trash2,
+  Gift,
 } from 'lucide-react';
 import { store } from '../services/store';
 import { metaPixel } from '../services/metaPixel';
+import { describeOffer } from '../services/pricing';
 import { CartItem, Order } from '../types';
 
 interface CheckoutViewProps {
   items: CartItem[];
-  directBuyItem?: CartItem | null;
   onNavigate: (path: string) => void;
-  onOrderConfirmed: (order: Order) => void;
+  onOrderConfirmed?: (order: Order) => void;
   onClearCart: () => void;
 }
 
 export const CheckoutView: React.FC<CheckoutViewProps> = ({
-  items: initialItems,
-  directBuyItem,
+  items,
   onNavigate,
   onOrderConfirmed,
   onClearCart,
 }) => {
-  // Local checkout items state for real-time quantity adjustments
-  const [localDirectItem, setLocalDirectItem] = useState<CartItem | null>(directBuyItem || null);
-  const [cartItemsState, setCartItemsState] = useState<CartItem[]>(
-    directBuyItem ? [directBuyItem] : initialItems.length > 0 ? initialItems : store.getCart()
-  );
-
-  const checkoutItems = localDirectItem ? [localDirectItem] : cartItemsState;
+  // Checkout always shows the one shared cart (Order Now also puts its product in this cart),
+  // so the bill here is the same bill the customer saw on the cart page.
+  const checkoutItems = items;
 
   // Delivery Zones
   const zones = store.getDeliveryZones();
@@ -76,6 +73,8 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
   const [isVerifyingPayment, setIsVerifyingPayment] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
 
+  const pricing = store.getCartPricing(checkoutItems);
+
   // Remember people who typed their phone number but did not finish the order (shown to the admin as "Abandoned Checkouts")
   useEffect(() => {
     const cleanLeadPhone = phone.trim();
@@ -92,20 +91,21 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
           size: i.size,
           color: i.color,
         })),
-        total: checkoutItems.reduce((sum, i) => sum + i.price * i.quantity, 0),
+        total: pricing.subtotalAfterOffer,
         zone: selectedZone?.name,
       });
     }, 1500);
     return () => clearTimeout(timer);
   }, [phone, firstName, lastName, deliveryAddress, checkoutItems.length, selectedZoneId, pendingOrder]);
 
-  // Calculations
-  const subtotal = checkoutItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  // Calculations (same functions the cart page and the saved order use)
+  const subtotal = pricing.subtotal; // after Buy 2 / Buy 3
+  const subtotalAfterOffer = pricing.subtotalAfterOffer; // after "buy 2+ different products" offer
   const totalItemCount = checkoutItems.reduce((sum, item) => sum + item.quantity, 0);
-  const hasFreeShippingOffer = checkoutItems.some((item) => item.freeShipping);
+  const hasFreeShippingOffer = pricing.freeDelivery;
   const standardFee = selectedZone ? selectedZone.advanceFee : 80;
   const advanceDeliveryFee = hasFreeShippingOffer ? 0 : standardFee;
-  const totalAmount = Math.max(0, subtotal + advanceDeliveryFee - discountAmount);
+  const totalAmount = Math.max(0, subtotalAfterOffer + advanceDeliveryFee - discountAmount);
 
   // Payable values based on selected payment option:
   const payableNow = paymentType === 'full_prepaid' ? totalAmount : 0;
@@ -124,18 +124,11 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
     if (checkoutItems.length > 0) {
       metaPixel.track('InitiateCheckout', {
         num_items: totalItemCount,
-        value: subtotal,
+        value: subtotalAfterOffer,
         currency: 'BDT',
       });
     }
   }, []);
-
-  // Sync cart items when prop changes
-  useEffect(() => {
-    if (!directBuyItem) {
-      setCartItemsState(initialItems.length > 0 ? initialItems : store.getCart());
-    }
-  }, [initialItems, directBuyItem]);
 
   // Escape key handler for modal
   useEffect(() => {
@@ -148,20 +141,15 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [pendingOrder]);
 
-  // Adjust item quantity directly in checkout
+  // Adjust item quantity directly in checkout (changes the shared cart, prices and offers update by themselves)
   const handleUpdateItemQuantity = (item: CartItem, delta: number) => {
     const newQty = item.quantity + delta;
     if (newQty <= 0) return;
+    store.updateCartQuantity(item.productId, item.variantId, newQty);
+  };
 
-    if (localDirectItem) {
-      setLocalDirectItem({
-        ...localDirectItem,
-        quantity: Math.min(newQty, localDirectItem.maxStock || 10),
-      });
-    } else {
-      store.updateCartQuantity(item.productId, item.variantId, newQty);
-      setCartItemsState(store.getCart());
-    }
+  const handleRemoveItem = (item: CartItem) => {
+    store.removeFromCart(item.productId, item.variantId);
   };
 
   // Copy Merchant / Personal number helper
@@ -174,7 +162,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
   // Recalculate discount if applied coupon exists and subtotal changes
   useEffect(() => {
     if (appliedDiscount) {
-      const result = store.validateCoupon(appliedDiscount, subtotal);
+      const result = store.validateCoupon(appliedDiscount, subtotalAfterOffer);
       if (result.valid) {
         setDiscountAmount(result.discountAmount);
       } else {
@@ -183,7 +171,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
         setError(result.error || 'Coupon removed as order no longer satisfies requirements.');
       }
     }
-  }, [subtotal, appliedDiscount]);
+  }, [subtotalAfterOffer, appliedDiscount]);
 
   // Promo code apply
   const handleApplyPromo = () => {
@@ -193,7 +181,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
       setError('Please enter a coupon code.');
       return;
     }
-    const result = store.validateCoupon(code, subtotal);
+    const result = store.validateCoupon(code, subtotalAfterOffer);
     if (result.valid && result.coupon) {
       setAppliedDiscount(result.coupon.code);
       setDiscountAmount(result.discountAmount);
@@ -266,10 +254,8 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
 
     // For Cash on Delivery: Order is placed and confirmed immediately! Zero advance payment popup!
     if (paymentType === 'advance_cod') {
-      if (!directBuyItem) {
-        onClearCart();
-      }
-      onOrderConfirmed(createdOrder);
+      onClearCart();
+      onOrderConfirmed?.(createdOrder);
       onNavigate(`/thank-you?order=${createdOrder.orderNumber}`);
       return;
     }
@@ -303,11 +289,9 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
         return;
       }
 
-      if (!directBuyItem) {
-        onClearCart();
-      }
+      onClearCart();
 
-      onOrderConfirmed(result.order);
+      onOrderConfirmed?.(result.order);
       onNavigate(`/thank-you?order=${result.order.orderNumber}`);
     }, 600);
   };
@@ -340,11 +324,11 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
         <div className="mb-5 sm:mb-6">
           <button
             type="button"
-            onClick={() => onNavigate('/products')}
+            onClick={() => onNavigate('/cart')}
             className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-bold text-black hover:text-[#800000] transition-colors cursor-pointer"
           >
             <ChevronLeft className="w-4 h-4 text-black" />
-            <span>Home / Products</span>
+            <span>Back to Cart / Add more products</span>
           </button>
         </div>
 
@@ -583,7 +567,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                           {item.name}
                         </h4>
                         <span className="font-sans font-bold text-xs sm:text-sm text-black tabular-nums shrink-0">
-                          ৳{(item.price * item.quantity).toLocaleString()}
+                          ৳{(pricing.lines.find((l) => l.item.productId === item.productId && l.item.variantId === item.variantId)?.lineTotal ?? item.price * item.quantity).toLocaleString()}
                         </span>
                       </div>
 
@@ -593,9 +577,14 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
 
                       {/* Quantity Controller */}
                       <div className="flex items-center justify-between mt-2 pt-1 border-t border-neutral-200">
-                        <span className="text-[11px] text-black font-bold">
-                          Quantity : {item.quantity}
-                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveItem(item)}
+                          className="text-[11px] text-neutral-500 hover:text-red-700 font-bold flex items-center gap-1 cursor-pointer"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                          <span>Remove</span>
+                        </button>
 
                         <div className="flex items-center gap-1.5 bg-neutral-100 p-0.5 rounded-lg border border-neutral-300">
                           <button
@@ -634,6 +623,26 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                   ৳{subtotal.toLocaleString()}
                 </span>
               </div>
+
+              {/* Cart offer (2+ different products) */}
+              {pricing.activeOffer && pricing.cartOfferDiscount > 0 && (
+                <div className="flex items-center justify-between text-xs p-2.5 bg-emerald-50 border border-emerald-300 rounded-xl text-emerald-900 font-bold">
+                  <span className="flex items-center gap-1.5">
+                    <Gift className="w-3.5 h-3.5" />
+                    <span>{pricing.activeOffer.extraDiscountPercent}% extra off ({pricing.distinctProducts} products)</span>
+                  </span>
+                  <span className="font-extrabold tabular-nums">- ৳{pricing.cartOfferDiscount.toLocaleString()}</span>
+                </div>
+              )}
+              {!pricing.activeOffer && pricing.nextOffer && (
+                <button
+                  type="button"
+                  onClick={() => onNavigate('/cart')}
+                  className="w-full text-left text-[11px] p-2.5 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 font-semibold cursor-pointer"
+                >
+                  Add {pricing.productsToNextOffer} more {pricing.productsToNextOffer === 1 ? 'product' : 'products'} to get {describeOffer(pricing.nextOffer)} →
+                </button>
+              )}
 
               {/* Promo Code Row */}
               <div className="pt-1">
@@ -692,7 +701,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                 <div className="flex justify-between">
                   <span className="font-bold text-black">Standard Delivery Fee</span>
                   <span className={`font-bold font-sans tabular-nums ${hasFreeShippingOffer ? 'text-emerald-700' : 'text-black'}`}>
-                    {hasFreeShippingOffer ? 'FREE (Bundle Offer)' : `৳${advanceDeliveryFee}`}
+                    {hasFreeShippingOffer ? 'FREE' : `৳${advanceDeliveryFee}`}
                   </span>
                 </div>
 
