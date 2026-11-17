@@ -765,6 +765,17 @@ export const INITIAL_SITE_SETTINGS: SiteSettings = {
   announcementBarText: 'Complimentary doorstep courier inspection across Bangladesh',
   announcementBarEnabled: false,
   supabaseConnected: false,
+  trustBadgesEnabled: true,
+  trustBadges: [
+    { id: 'tb-cod', icon: 'banknote', text: 'Cash on Delivery', enabled: true },
+    { id: 'tb-free', icon: 'truck', text: 'Free Delivery on 2+ items', enabled: true },
+    { id: 'tb-trust', icon: 'badge-check', text: 'Trusted Store', enabled: true },
+  ],
+  cartOffersEnabled: true,
+  cartOffers: [
+    { id: 'co-2', minProducts: 2, extraDiscountPercent: 5, freeDelivery: true, enabled: true },
+    { id: 'co-3', minProducts: 3, extraDiscountPercent: 8, freeDelivery: true, enabled: true },
+  ],
 };
 
 export const INITIAL_PROMO_POPUP: PromotionalPopup = {
