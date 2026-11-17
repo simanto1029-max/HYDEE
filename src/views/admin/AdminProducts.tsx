@@ -95,6 +95,7 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ onNavigateToProduc
   }, [isModalOpen]);
 
   // Bundle Offer Tiers (Screenshot 3 Style)
+  const [formBundleEnabled, setFormBundleEnabled] = useState<boolean>(true);
   const [formBundleHeadline, setFormBundleHeadline] = useState('50% OFF TODAY ONLY');
   const [formTier1Price, setFormTier1Price] = useState<number>(0);
   const [formTier1FreeShipping, setFormTier1FreeShipping] = useState<boolean>(false);
@@ -310,6 +311,7 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ onNavigateToProduc
       { name: 'Black', imageUrl: '', colorHex: '#171717' },
       { name: 'Dark Red', imageUrl: '', colorHex: '#800000' },
     ]);
+    setFormBundleEnabled(true);
     setFormBundleHeadline('50% OFF TODAY ONLY');
     setFormTier1Price(1799);
     setFormTier1FreeShipping(false);
@@ -382,7 +384,8 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ onNavigateToProduc
     }
 
     // Load bundle tiers & free shipping
-    setFormBundleHeadline(p.bundleHeadline || '50% OFF TODAY ONLY');
+    setFormBundleEnabled(p.bundleEnabled !== false);
+    setFormBundleHeadline(p.bundleHeadline ?? '50% OFF TODAY ONLY');
     const tiers = p.bundleTiers || [];
     setFormTier1Price(tiers[0]?.price ?? p.price);
     setFormTier1FreeShipping(tiers[0]?.freeShipping ?? false);
@@ -427,6 +430,7 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ onNavigateToProduc
         subtitle: formTier1Subtitle.trim() || autoTierSubtitle(0, formTier1FreeShipping),
         price: Number(formTier1Price || formPrice),
         freeShipping: formTier1FreeShipping,
+        bundleOff: !formBundleEnabled || undefined,
       },
       {
         quantity: 2,
@@ -501,6 +505,7 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ onNavigateToProduc
       isFeatured: formIsFeatured,
       isHangerFeatured: formIsHangerFeatured,
       variants: generatedVariants,
+      bundleEnabled: formBundleEnabled,
       bundleHeadline: formBundleHeadline,
       bundleTiers,
     });
@@ -1111,10 +1116,18 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ onNavigateToProduc
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-2">
                     <Sparkles className="w-4 h-4 text-[#800000]" />
-                    <span className="font-semibold text-neutral-900">Quantity Bundle Offers (Screenshot 3 Style)</span>
+                    <span className="font-semibold text-neutral-900">Quantity Bundle Offers (Buy 1 / Buy 2 / Buy 3)</span>
                   </div>
-                  <span className="text-[10px] text-neutral-500 font-mono">Custom Tiered Pricing</span>
+                  <label className="flex items-center gap-1.5 text-[11px] font-bold text-neutral-800 cursor-pointer">
+                    <input type="checkbox" checked={formBundleEnabled} onChange={(e) => setFormBundleEnabled(e.target.checked)} />
+                    <span>Show Buy 1 / 2 / 3 offer on this product</span>
+                  </label>
                 </div>
+                {!formBundleEnabled && (
+                  <p className="text-[11px] text-amber-700 font-semibold">
+                    Offer box is hidden on this product page: customers pay the normal price for every piece.
+                  </p>
+                )}
 
                 <div>
                   <label className="block font-semibold text-neutral-700 mb-1 text-[11px]">
@@ -1155,7 +1168,7 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ onNavigateToProduc
                         onChange={(e) => setFormTier1FreeShipping(e.target.checked)}
                         className="rounded-xs text-emerald-600"
                       />
-                      <span>Free Delivery (ফ্রি ডেলিভারি)</span>
+                      <span>Free Delivery</span>
                     </label>
                   </div>
 
@@ -1194,7 +1207,7 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ onNavigateToProduc
                         onChange={(e) => setFormTier2FreeShipping(e.target.checked)}
                         className="rounded-xs text-emerald-600"
                       />
-                      <span>Free Delivery (ফ্রি ডেলিভারি)</span>
+                      <span>Free Delivery</span>
                     </label>
                   </div>
 
@@ -1223,7 +1236,7 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ onNavigateToProduc
                         onChange={(e) => setFormTier3FreeShipping(e.target.checked)}
                         className="rounded-xs text-emerald-600"
                       />
-                      <span>Free Delivery (ফ্রি ডেলিভারি)</span>
+                      <span>Free Delivery</span>
                     </label>
                   </div>
                 </div>
