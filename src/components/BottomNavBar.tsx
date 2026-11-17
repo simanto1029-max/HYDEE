@@ -16,7 +16,7 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({
 }) => {
   const isShopActive = currentPath === '/products' || currentPath.startsWith('/categories');
   const isHomeActive = currentPath === '/';
-  const isCheckoutActive = currentPath === '/checkout';
+  const isCheckoutActive = currentPath === '/cart' || currentPath === '/checkout';
   const isTrackActive = currentPath === '/track-order';
 
   return (
@@ -76,10 +76,10 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({
           </span>
         </div>
 
-        {/* 4. Checkout (With live cart counter badge) */}
+        {/* 4. Cart (With live cart counter badge) */}
         <button
           type="button"
-          onClick={() => onNavigate('/checkout')}
+          onClick={() => onNavigate('/cart')}
           className={`flex-1 flex flex-col items-center justify-center py-1 relative transition-colors cursor-pointer ${
             isCheckoutActive ? 'text-neutral-950 font-semibold' : 'text-neutral-500 hover:text-neutral-900'
           }`}
@@ -92,7 +92,7 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({
               </span>
             )}
           </div>
-          <span className="text-[11px] tracking-tight mt-1">Checkout</span>
+          <span className="text-[11px] tracking-tight mt-1">Cart</span>
         </button>
 
         {/* 5. Track Order */}
