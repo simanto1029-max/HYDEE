@@ -24,6 +24,7 @@ import {
   INITIAL_SITE_SETTINGS,
 } from './mockData';
 import { supabase, isSupabaseConfigured } from './supabase';
+import { priceCart, CartPricing } from './pricing';
 import {
   saveAllProductsIDB,
   getAllProductsIDB,
@@ -631,6 +632,7 @@ class StoreService {
       customSizes: p.custom_sizes || existing?.customSizes || (hasSizes ? realSizes : []),
       colorOptions: colors || [],
       bundleTiers: resolvedBundleTiers,
+      bundleEnabled: !resolvedBundleTiers[0]?.bundleOff,
       bundleHeadline: resolvedHeadline,
       tags: Array.isArray(p.tags) ? p.tags : [],
       isBestSeller: Boolean(p.is_best_seller),
@@ -1156,21 +1158,31 @@ class StoreService {
     return [...this.cart];
   }
 
-  addToCart(product: Product, variantId?: string, quantity: number = 1, customUnitPrice?: number) {
+  // mode 'add'  : put `quantity` more pieces into the cart (Add to Cart button)
+  // mode 'set'  : make this product line exactly `quantity` pieces (Order Now button, so pressing it twice never doubles the quantity)
+  // The price is NOT taken from the browser any more: Buy 2 / Buy 3 and cart offers are worked out from the product itself (see pricing.ts).
+  addToCart(
+    product: Product,
+    variantId?: string,
+    quantity: number = 1,
+    _customUnitPrice?: number,
+    mode: 'add' | 'set' = 'add'
+  ) {
     const selectedVariant = product.variants.find((v) => v.id === variantId) || product.variants[0];
     const existingIndex = this.cart.findIndex(
       (item) => item.productId === product.id && item.variantId === selectedVariant.id
     );
 
-    const price = customUnitPrice !== undefined ? customUnitPrice : (selectedVariant.price || product.price);
+    const price = selectedVariant.price || product.price;
+    const maxStock = selectedVariant.stock || product.stock;
 
     if (existingIndex >= 0) {
       const item = this.cart[existingIndex];
-      const newQty = Math.min(item.quantity + quantity, selectedVariant.stock || product.stock);
-      this.cart[existingIndex].quantity = newQty;
-      if (customUnitPrice !== undefined) {
-        this.cart[existingIndex].price = customUnitPrice;
-      }
+      const wanted = mode === 'set' ? quantity : item.quantity + quantity;
+      item.quantity = Math.max(1, Math.min(wanted, maxStock));
+      item.price = price;
+      item.maxStock = maxStock;
+      item.freeShipping = undefined;
     } else {
       this.cart.push({
         productId: product.id,
@@ -1181,12 +1193,17 @@ class StoreService {
         size: selectedVariant.size,
         color: selectedVariant.color,
         price,
-        quantity: Math.min(quantity, selectedVariant.stock || product.stock),
-        maxStock: selectedVariant.stock || product.stock,
+        quantity: Math.max(1, Math.min(quantity, maxStock)),
+        maxStock,
       });
     }
 
     this.persist();
+  }
+
+  // Full price breakdown of the cart (Buy 2 / Buy 3 + cart offers). Used by the cart page, checkout and order creation.
+  getCartPricing(items?: CartItem[]): CartPricing {
+    return priceCart(items || this.cart, this.getSettings(), (id) => this.getProductById(id));
   }
 
   updateCartQuantity(productId: string, variantId: string, quantity: number) {
@@ -1258,8 +1275,8 @@ class StoreService {
     if (payload.items.length === 0) return { success: false, error: 'Cart is empty.' };
 
     // 2. Server re-validation of inventory & prices
-    let subtotal = 0;
-    const validatedOrderItems = [];
+    const validatedOrderItems: Order['items'] = [];
+    const pricingInput: CartItem[] = [];
 
     for (const item of payload.items) {
       const product = this.getProductById(item.productId);
@@ -1272,34 +1289,44 @@ class StoreService {
       if (availableStock < item.quantity && !payload.isTestOrder) {
         return { success: false, error: `Insufficient stock for "${product.name}" (${variant.name}). Only ${availableStock} left.` };
       }
+      pricingInput.push({ ...item, variantId: variant.id, price: variant.price || product.price });
+    }
 
-      const verifiedPrice = variant.price || product.price;
-      subtotal += verifiedPrice * item.quantity;
+    // Prices, Buy 2 / Buy 3 pricing, cart offer and free delivery are all re-calculated here from the product data and
+    // the admin's offer settings. Whatever price the browser sent is ignored, so nobody can change a price from the console.
+    const cartPricing = this.getCartPricing(pricingInput);
+    const subtotal = cartPricing.subtotal;
 
+    for (const line of cartPricing.lines) {
+      const product = this.getProductById(line.item.productId)!;
+      const variant = product.variants.find((v) => v.id === line.item.variantId) || product.variants[0];
       validatedOrderItems.push({
         productId: product.id,
         productName: product.name,
         variantId: variant.id,
         variantName: `${variant.size} / ${variant.color}`,
-        price: verifiedPrice,
-        quantity: item.quantity,
+        price: Math.round(line.unitPrice),
+        lineTotal: line.lineTotal,
+        quantity: line.item.quantity,
         imageUrl: product.images[0],
       });
     }
 
-    // 3. Discount calculation
-    let discountAmount = 0;
+    // 3. Discount calculation (cart offer first, then the coupon on what is left)
+    const cartOfferDiscount = cartPricing.cartOfferDiscount;
+    let couponDiscount = 0;
     let verifiedDiscountCode: string | undefined = undefined;
     if (payload.discountCode && payload.discountCode.trim()) {
-      const couponCheck = this.validateCoupon(payload.discountCode.trim(), subtotal);
+      const couponCheck = this.validateCoupon(payload.discountCode.trim(), cartPricing.subtotalAfterOffer);
       if (couponCheck.valid && couponCheck.coupon) {
-        discountAmount = couponCheck.discountAmount;
+        couponDiscount = couponCheck.discountAmount;
         verifiedDiscountCode = couponCheck.coupon.code;
         couponCheck.coupon.usageCount = (couponCheck.coupon.usageCount || 0) + 1;
       }
     }
+    const discountAmount = cartOfferDiscount + couponDiscount;
 
-    const advanceDeliveryFee = zone.advanceFee;
+    const advanceDeliveryFee = cartPricing.freeDelivery ? 0 : zone.advanceFee;
     const totalAmount = Math.max(0, subtotal + advanceDeliveryFee - discountAmount);
     const isFullPayment = payload.paymentType === 'full_prepaid';
     const remainingCodAmount = isFullPayment ? 0 : totalAmount;
@@ -1340,7 +1367,12 @@ class StoreService {
       subtotal,
       advanceDeliveryFee,
       discountAmount,
-      discountCode: payload.discountCode,
+      cartOfferDiscount: cartOfferDiscount || undefined,
+      cartOfferLabel: cartPricing.activeOffer
+        ? `${cartPricing.distinctProducts} products: ${cartPricing.activeOffer.extraDiscountPercent}% extra off${cartPricing.activeOffer.freeDelivery ? ' + free delivery' : ''}`
+        : undefined,
+      freeDelivery: cartPricing.freeDelivery || undefined,
+      discountCode: verifiedDiscountCode,
       totalAmount,
       remainingCodAmount,
       paymentType: payload.paymentType || 'advance_cod',
