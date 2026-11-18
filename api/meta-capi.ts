@@ -1,6 +1,4 @@
-/***
- 
- */
+
 import { createHash } from 'node:crypto';
 
 function sha256(value: string): string {
@@ -79,6 +77,7 @@ export default async function handler(req: any, res: any) {
 
     const pixelId = process.env.META_PIXEL_ID;
     const accessToken = process.env.META_ACCESS_TOKEN;
+    const testEventCode = process.env.META_TEST_EVENT_CODE?.trim();
 
     if (!pixelId || !accessToken) {
       console.error('HYDEE: Meta environment variables missing.');
@@ -101,8 +100,7 @@ export default async function handler(req: any, res: any) {
 
     const eventTime = Math.floor(Date.now() / 1000);
 
-    const forwardedFor =
-      req.headers['x-forwarded-for'];
+    const forwardedFor = req.headers['x-forwarded-for'];
 
     const clientIp =
       typeof forwardedFor === 'string'
@@ -111,18 +109,37 @@ export default async function handler(req: any, res: any) {
 
     const hashedUserData = await hashUserData(userData);
 
-    const payload = {
+    // Accept both HYDEE domains and reject unrelated URLs.
+    let safeEventSourceUrl = 'https://hydee.shop/';
+
+    if (typeof eventSourceUrl === 'string') {
+      try {
+        const parsedUrl = new URL(eventSourceUrl);
+
+        const allowedHosts = [
+          'hydee.shop',
+          'www.hydee.shop',
+        ];
+
+        if (
+          parsedUrl.protocol === 'https:' &&
+          allowedHosts.includes(parsedUrl.hostname)
+        ) {
+          safeEventSourceUrl = parsedUrl.toString();
+        }
+      } catch {
+        // Use the canonical website URL if parsing fails.
+      }
+    }
+
+    const payload: Record<string, any> = {
       data: [
         {
           event_name: eventName,
           event_time: eventTime,
           event_id: eventId || `hydee_${eventTime}`,
 
-          event_source_url:
-            typeof eventSourceUrl === 'string' &&
-            eventSourceUrl.startsWith('https://www.hydee.shop')
-              ? eventSourceUrl
-              : 'https://www.hydee.shop/',
+          event_source_url: safeEventSourceUrl,
 
           action_source: 'website',
 
@@ -136,6 +153,11 @@ export default async function handler(req: any, res: any) {
         },
       ],
     };
+
+    // Add Test Event Code only when configured in Vercel.
+    if (testEventCode) {
+      payload.test_event_code = testEventCode;
+    }
 
     const apiVersion =
       process.env.META_GRAPH_API_VERSION || 'v26.0';
