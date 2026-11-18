@@ -776,6 +776,13 @@ export const INITIAL_SITE_SETTINGS: SiteSettings = {
     { id: 'co-2', minProducts: 2, extraDiscountPercent: 5, freeDelivery: true, enabled: true },
     { id: 'co-3', minProducts: 3, extraDiscountPercent: 8, freeDelivery: true, enabled: true },
   ],
+  faqEnabled: true,
+  faqTitle: 'Frequently Asked Questions',
+  faqs: [
+    { id: 'faq-1', question: 'Can I pay Cash on Delivery?', answer: 'Yes. You can order with Cash on Delivery and pay the courier when the parcel reaches you.', enabled: true },
+    { id: 'faq-2', question: 'How long does delivery take?', answer: 'Inside Dhaka 24–48 hours, outside Dhaka 3–4 days.', enabled: true },
+    { id: 'faq-3', question: 'How do I choose my size?', answer: 'Check the size chart in the product details above. If you are unsure, message us on WhatsApp and we will help you.', enabled: true },
+  ],
 };
 
 export const INITIAL_PROMO_POPUP: PromotionalPopup = {
