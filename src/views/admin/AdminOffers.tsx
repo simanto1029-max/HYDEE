@@ -31,6 +31,8 @@ export const AdminOffers: React.FC = () => {
   const [faqTitle, setFaqTitle] = useState<string>(initial.faqTitle ?? 'Frequently Asked Questions');
   const [faqs, setFaqs] = useState<FaqItem[]>(initial.faqs || []);
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [result, setResult] = useState<{ success: boolean; message: string } | null>(null);
 
   const updateFaq = (id: string, patch: Partial<FaqItem>) =>
     setFaqs((list) => list.map((f) => (f.id === id ? { ...f, ...patch } : f)));
@@ -59,8 +61,10 @@ export const AdminOffers: React.FC = () => {
   const updateOffer = (id: string, patch: Partial<CartOfferRule>) =>
     setOffers((list) => list.map((o) => (o.id === id ? { ...o, ...patch } : o)));
 
-  const handleSave = () => {
-    store.updateSettings({
+  const handleSave = async () => {
+    setSaving(true);
+    setResult(null);
+    const res = await store.updateSettings({
       trustBadgesEnabled: badgesEnabled,
       trustBadges: badges,
       faqEnabled,
@@ -73,7 +77,9 @@ export const AdminOffers: React.FC = () => {
         extraDiscountPercent: Math.max(0, Math.min(90, Number(o.extraDiscountPercent) || 0)),
       })),
     });
-    setSaved(true);
+    setSaving(false);
+    setResult(res);
+    setSaved(res.success);
     setTimeout(() => setSaved(false), 2500);
   };
 
@@ -96,7 +102,7 @@ export const AdminOffers: React.FC = () => {
           className="bg-[#800000] hover:bg-[#600000] text-white text-xs font-bold px-6 py-3 rounded-xl cursor-pointer flex items-center gap-2"
         >
           {saved ? <Check className="w-4 h-4" /> : null}
-          <span>{saved ? 'Saved' : 'Save Changes'}</span>
+          <span>{saving ? 'Saving...' : saved ? 'Saved' : 'Save Changes'}</span>
         </button>
       </div>
 
@@ -355,8 +361,17 @@ export const AdminOffers: React.FC = () => {
           onClick={handleSave}
           className="bg-[#800000] hover:bg-[#600000] text-white text-xs font-bold px-7 py-3.5 rounded-xl cursor-pointer"
         >
-          {saved ? 'Saved ✓' : 'Save Changes'}
+          {saving ? 'Saving...' : saved ? 'Saved ✓' : 'Save Changes'}
         </button>
+        {result && (
+          <p
+            className={`mt-3 text-xs font-semibold rounded-xl border p-3 ${
+              result.success ? 'text-emerald-800 bg-emerald-50 border-emerald-200' : 'text-red-800 bg-red-50 border-red-200'
+            }`}
+          >
+            {result.message}
+          </p>
+        )}
       </div>
     </div>
   );
