@@ -1,155 +1,215 @@
-// Meta Pixel & Conversions API (CAPI) Complete Service
+
+/**
+ * HYDEE Meta Pixel + Conversions API
+ * Supports existing App.tsx, CheckoutView.tsx and ThankYouView.tsx.
+ */
 
 declare global {
   interface Window {
     fbq?: (...args: any[]) => void;
     _fbq?: any;
+    __hydeePixelBootId?: string;
+    __hydeeBootPageViewSent?: boolean;
+    __hydeeInitializedPixelIds?: string[];
   }
 }
 
-export const META_PIXEL_ID = import.meta.env.VITE_META_PIXEL_ID || '';
-
-// Helper to send event to both Browser Pixel and Vercel CAPI Serverless Function
-const sendDualEvent = async (
-  eventName: string,
-  customData: Record<string, any> = {},
-  userData: { em?: string; ph?: string; fn?: string; ln?: string } = {}
-) => {
-  const eventId = `evt_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-
-  // 1. Browser Pixel Track
-  if (typeof window !== 'undefined' && window.fbq) {
-    window.fbq('track', eventName, customData, { eventID: eventId });
-  }
-
-  // 2. Server CAPI Track
-  try {
-    await fetch('/api/meta-capi', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        eventName,
-        eventSourceUrl: typeof window !== 'undefined' ? window.location.href : '',
-        userData,
-        customData,
-        eventId,
-      }),
-    });
-  } catch (error) {
-    console.error(`Meta CAPI error (${eventName}):`, error);
-  }
+type MetaUserData = {
+  em?: string;
+  ph?: string;
+  fn?: string;
+  ln?: string;
+  fbp?: string;
+  fbc?: string;
+  external_id?: string;
 };
 
-// Initialize Meta Pixel
-export const initMetaPixel = (pixelId?: string): void => {
-  const activePixelId = pixelId || META_PIXEL_ID;
-  if (!activePixelId || typeof window === 'undefined') return;
+let activePixelId = '';
+
+function createEventId(): string {
+  return `hydee_${Date.now()}_${Math.random()
+    .toString(36)
+    .slice(2, 12)}`;
+}
+
+function loadPixel(): void {
+  if (typeof window === 'undefined') return;
   if (window.fbq) return;
 
-  (function (f: any, b: any, e: any, v: any, n?: any, t?: any, s?: any) {
-    if (f.fbq) return;
-    n = f.fbq = function (...args: any[]) {
-      n.callMethod ? n.callMethod.apply(n, args) : n.queue.push(args);
-    };
-    if (!f._fbq) f._fbq = n;
-    n.push = n;
-    n.loaded = !0;
-    n.version = '2.0';
-    n.queue = [];
-    t = b.createElement(e);
-    t.async = !0;
-    t.src = v;
-    s = b.getElementsByTagName(e)[0];
-    if (s && s.parentNode) {
-      s.parentNode.insertBefore(t, s);
+  const fbq: any = function (...args: any[]) {
+    if (fbq.callMethod) {
+      fbq.callMethod.apply(fbq, args);
+    } else {
+      fbq.queue.push(args);
     }
-  })(window, document, 'script', 'https://connect.facebook.net/en_US/fbevents.js');
+  };
 
-  if (window.fbq) {
-    window.fbq('init', activePixelId);
-  }
-};
+  fbq.push = fbq;
+  fbq.loaded = true;
+  fbq.version = '2.0';
+  fbq.queue = [];
 
-// Standard Event Exports (Matching all existing imports across the app)
-export const trackPageView = (): void => {
-  sendDualEvent('PageView');
-};
+  window.fbq = fbq;
+  window._fbq = fbq;
 
-export const trackViewContent = (product: {
-  id: string;
-  name: string;
-  price: number;
-  category?: string;
-}): void => {
-  sendDualEvent('ViewContent', {
-    content_ids: [product.id],
-    content_name: product.name,
-    content_type: 'product',
-    content_category: product.category || 'Fashion',
-    value: product.price,
-    currency: 'BDT',
-  });
-};
+  const script = document.createElement('script');
+  script.async = true;
+  script.src = 'https://connect.facebook.net/en_US/fbevents.js';
 
-export const trackAddToCart = (product: {
-  id: string;
-  name: string;
-  price: number;
-  quantity?: number;
-}): void => {
-  sendDualEvent('AddToCart', {
-    content_ids: [product.id],
-    content_name: product.name,
-    content_type: 'product',
-    value: product.price * (product.quantity || 1),
-    currency: 'BDT',
-  });
-};
+  document.head.appendChild(script);
+}
 
-export const trackInitiateCheckout = (
-  items: Array<{ id: string; quantity: number; price: number }>,
-  totalValue: number
-): void => {
-  sendDualEvent('InitiateCheckout', {
-    content_ids: items.map((i) => i.id),
-    content_type: 'product',
-    num_items: items.reduce((sum, i) => sum + i.quantity, 0),
-    value: totalValue,
-    currency: 'BDT',
-  });
-};
+function sendCAPI(
+  eventName: string,
+  customData: Record<string, any>,
+  userData: MetaUserData,
+  eventId: string
+): void {
+  if (typeof window === 'undefined') return;
 
-export const trackPurchase = (order: {
-  orderId: string;
-  items: Array<{ id: string; quantity: number; price: number }>;
-  totalValue: number;
-  customerEmail?: string;
-  customerPhone?: string;
-  customerName?: string;
-}): void => {
-  const nameParts = (order.customerName || '').trim().split(' ');
-  const fn = nameParts[0] || '';
-  const ln = nameParts.slice(1).join(' ') || '';
-
-  sendDualEvent(
-    'Purchase',
-    {
-      content_ids: order.items.map((i) => i.id),
-      content_type: 'product',
-      num_items: order.items.reduce((sum, i) => sum + i.quantity, 0),
-      value: order.totalValue,
-      currency: 'BDT',
-      order_id: order.orderId,
+  fetch('/api/meta-capi', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
     },
-    {
-      em: order.customerEmail,
-      ph: order.customerPhone,
-      fn,
-      ln,
-    }
-  );
-};
+    body: JSON.stringify({
+      eventName,
+      eventSourceUrl: window.location.href,
+      eventId,
+      customData,
+      userData,
+    }),
+  })
+    .then(async (response) => {
+      if (!response.ok) {
+        const error = await response.text();
+        console.error('HYDEE CAPI Error:', response.status, error);
+      }
+    })
+    .catch((error) => {
+      console.error('HYDEE CAPI Network Error:', error);
+    });
+}
 
-export const trackMetaEvent = sendDualEvent;
+export const metaPixel = {
+  // Initialize Pixel using the ID saved in HYDEE admin settings.
+  init(pixelId?: string): void {
+    if (typeof window === 'undefined') return;
+
+    const id = String(
+      pixelId ||
+      window.__hydeePixelBootId ||
+      ''
+    ).trim();
+
+    if (!id) {
+      console.warn('HYDEE: Meta Pixel ID is missing.');
+      return;
+    }
+
+    activePixelId = id;
+
+    loadPixel();
+
+    const initialized =
+      window.__hydeeInitializedPixelIds || [];
+
+    // index.html may already have initialized this Pixel.
+    if (window.__hydeePixelBootId === id) {
+      window.__hydeeInitializedPixelIds = [
+        ...new Set([...initialized, id]),
+      ];
+      return;
+    }
+
+    if (initialized.includes(id)) return;
+
+    window.fbq?.('init', id);
+
+    window.__hydeeInitializedPixelIds = [
+      ...initialized,
+      id,
+    ];
+  },
+
+  // Track standard Meta events on browser and server.
+  track(
+    eventName: string,
+    customData: Record<string, any> = {},
+    userData: MetaUserData = {},
+    eventId?: string
+  ): void {
+    if (typeof window === 'undefined') return;
+
+    this.init(activePixelId);
+
+    const id = eventId || createEventId();
+
+    // Browser Pixel
+    if (window.fbq) {
+      window.fbq(
+        'track',
+        eventName,
+        customData,
+        { eventID: id }
+      );
+    }
+
+    // Server Conversions API
+    sendCAPI(eventName, customData, userData, id);
+  },
+
+  // Track a completed order.
+  trackPurchase(
+    orderNumber: string,
+    value: number,
+    currency: string = 'BDT',
+    quantity: number = 1,
+    items: Array<{
+      id: string;
+      quantity: number;
+      price: number;
+    }> = []
+  ): void {
+    if (typeof window === 'undefined' || !orderNumber) {
+      return;
+    }
+
+    const storageKey = `hydee_purchase_${orderNumber}`;
+
+    try {
+      if (localStorage.getItem(storageKey)) {
+        return;
+      }
+
+      // Prevent the same order from firing Purchase repeatedly.
+      localStorage.setItem(storageKey, 'sent');
+    } catch (error) {
+      console.warn('HYDEE Purchase storage unavailable:', error);
+    }
+
+    const customData = {
+      value: Number(value),
+      currency,
+      content_type: 'product',
+      content_ids: items.map((item) => item.id),
+      contents: items.map((item) => ({
+        id: item.id,
+        quantity: item.quantity,
+        item_price: item.price,
+      })),
+      num_items: quantity,
+      order_id: orderNumber,
+    };
+
+    // Stable event ID enables browser/server deduplication.
+    const eventId = `purchase_${orderNumber}`;
+
+    this.track(
+      'Purchase',
+      customData,
+      {},
+      eventId
+    );
+  },
+};
