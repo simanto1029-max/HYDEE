@@ -217,6 +217,13 @@ export interface HeroSlide {
   order: number;
 }
 
+export interface FaqItem {
+  id: string;
+  question: string;
+  answer: string;
+  enabled: boolean;
+}
+
 export type TrustBadgeIcon =
   | 'banknote'
   | 'truck'
@@ -276,6 +283,10 @@ export interface SiteSettings {
   trustBadges?: TrustBadge[];
   cartOffersEnabled?: boolean;
   cartOffers?: CartOfferRule[];
+  // FAQ box on every product page (Admin > Offers & Badges)
+  faqEnabled?: boolean;
+  faqTitle?: string;
+  faqs?: FaqItem[];
 }
 
 export interface AuditLog {
