@@ -15,7 +15,8 @@ export const FloatingConcierge: React.FC = () => {
 
   const handleStartWhatsApp = (prefillMessage: string) => {
     const text = encodeURIComponent(prefillMessage);
-    const num = (settings.whatsappNumber || '8801601705804').replace(/[^0-9]/g, '');
+    let num = (settings.whatsappNumber || '8801601705804').replace(/[^0-9]/g, '');
+    if (num.startsWith('0')) num = `88${num}`; // 01601705804 -> 8801601705804
     window.open(`https://wa.me/${num}?text=${text}`, '_blank');
   };
 
@@ -24,7 +25,7 @@ export const FloatingConcierge: React.FC = () => {
       {/* Floating WhatsApp button: only the WhatsApp logo, in WhatsApp green (no text) */}
       <div className="fixed bottom-20 md:bottom-6 right-4 sm:right-6 z-30 flex items-center">
         <button
-          onClick={() => setIsOpen(!isOpen)}
+          onClick={() => handleStartWhatsApp('Hello HYDEE! I would like to know more about your products.')}
           className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-[#25D366] hover:bg-[#1ebe5b] text-white flex items-center justify-center shadow-[0_8px_25px_rgba(37,211,102,0.45)] border-2 border-white transition-all duration-300 hover:scale-105 active:scale-95 cursor-pointer"
           aria-label="Contact us on WhatsApp"
           title="WhatsApp"
