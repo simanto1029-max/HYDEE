@@ -1,4 +1,6 @@
-
+/***
+ 
+ */
 import { createHash } from 'node:crypto';
 
 function sha256(value: string): string {
