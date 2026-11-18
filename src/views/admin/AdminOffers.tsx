@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { Plus, Trash2, ArrowUp, ArrowDown, Check, Gift, BadgeCheck } from 'lucide-react';
+import { Plus, Trash2, ArrowUp, ArrowDown, Check, Gift, BadgeCheck, HelpCircle } from 'lucide-react';
 import { store } from '../../services/store';
 import { TRUST_BADGE_ICONS } from '../../components/TrustBadgeStrip';
-import { CartOfferRule, TrustBadge, TrustBadgeIcon } from '../../types';
+import { CartOfferRule, FaqItem, TrustBadge, TrustBadgeIcon } from '../../types';
 
 const ICON_OPTIONS: { id: TrustBadgeIcon; label: string }[] = [
   { id: 'banknote', label: 'Cash' },
@@ -27,7 +27,22 @@ export const AdminOffers: React.FC = () => {
   const [badges, setBadges] = useState<TrustBadge[]>(initial.trustBadges || []);
   const [offersEnabled, setOffersEnabled] = useState<boolean>(initial.cartOffersEnabled !== false);
   const [offers, setOffers] = useState<CartOfferRule[]>(initial.cartOffers || []);
+  const [faqEnabled, setFaqEnabled] = useState<boolean>(initial.faqEnabled !== false);
+  const [faqTitle, setFaqTitle] = useState<string>(initial.faqTitle ?? 'Frequently Asked Questions');
+  const [faqs, setFaqs] = useState<FaqItem[]>(initial.faqs || []);
   const [saved, setSaved] = useState(false);
+
+  const updateFaq = (id: string, patch: Partial<FaqItem>) =>
+    setFaqs((list) => list.map((f) => (f.id === id ? { ...f, ...patch } : f)));
+
+  const moveFaq = (index: number, dir: -1 | 1) =>
+    setFaqs((list) => {
+      const next = [...list];
+      const target = index + dir;
+      if (target < 0 || target >= next.length) return list;
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
 
   const updateBadge = (id: string, patch: Partial<TrustBadge>) =>
     setBadges((list) => list.map((b) => (b.id === id ? { ...b, ...patch } : b)));
@@ -48,6 +63,9 @@ export const AdminOffers: React.FC = () => {
     store.updateSettings({
       trustBadgesEnabled: badgesEnabled,
       trustBadges: badges,
+      faqEnabled,
+      faqTitle,
+      faqs,
       cartOffersEnabled: offersEnabled,
       cartOffers: offers.map((o) => ({
         ...o,
@@ -248,6 +266,85 @@ export const AdminOffers: React.FC = () => {
           >
             <Plus className="w-4 h-4" />
             <span>Add offer level</span>
+          </button>
+        </div>
+      </section>
+
+      {/* ---------------- FAQ ---------------- */}
+      <section className="bg-white rounded-3xl border border-neutral-200 p-5 sm:p-7 space-y-5">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <HelpCircle className="w-5 h-5 text-[#800000]" />
+            <h3 className="font-serif text-lg font-bold text-neutral-950">FAQ box (product page)</h3>
+          </div>
+          <label className="flex items-center gap-2 text-xs font-semibold text-neutral-800 cursor-pointer">
+            <input type="checkbox" checked={faqEnabled} onChange={(e) => setFaqEnabled(e.target.checked)} />
+            <span>Show on website</span>
+          </label>
+        </div>
+        <p className="text-[11px] text-neutral-500">
+          Shows in the middle of every product page, under the description and above Similar Products. Write any question and answer you like.
+        </p>
+
+        <label className="block text-[10px] font-semibold text-neutral-600">
+          Box title
+          <input
+            type="text"
+            value={faqTitle}
+            onChange={(e) => setFaqTitle(e.target.value)}
+            className="mt-1 w-full p-2.5 text-xs font-bold border border-neutral-200 rounded-lg bg-white focus:border-[#800000] focus:outline-hidden"
+          />
+        </label>
+
+        <div className="space-y-3">
+          {faqs.map((f, idx) => (
+            <div
+              key={f.id}
+              className={`p-3 rounded-2xl border space-y-2 ${
+                f.enabled ? 'border-neutral-200 bg-neutral-50/60' : 'border-dashed border-neutral-300 bg-white opacity-70'
+              }`}
+            >
+              <input
+                type="text"
+                value={f.question}
+                onChange={(e) => updateFaq(f.id, { question: e.target.value })}
+                placeholder="Question"
+                className="w-full p-2.5 text-xs font-bold border border-neutral-200 rounded-lg bg-white focus:border-[#800000] focus:outline-hidden"
+              />
+              <textarea
+                value={f.answer}
+                onChange={(e) => updateFaq(f.id, { answer: e.target.value })}
+                placeholder="Answer"
+                rows={3}
+                className="w-full p-2.5 text-xs border border-neutral-200 rounded-lg bg-white focus:border-[#800000] focus:outline-hidden"
+              />
+              <div className="flex items-center justify-between">
+                <label className="flex items-center gap-1.5 text-[11px] font-semibold text-neutral-700 cursor-pointer">
+                  <input type="checkbox" checked={f.enabled} onChange={(e) => updateFaq(f.id, { enabled: e.target.checked })} />
+                  <span>Show</span>
+                </label>
+                <div className="flex items-center gap-1">
+                  <button type="button" onClick={() => moveFaq(idx, -1)} disabled={idx === 0} className="p-1.5 rounded-md hover:bg-neutral-200 disabled:opacity-30 cursor-pointer" title="Move up">
+                    <ArrowUp className="w-3.5 h-3.5" />
+                  </button>
+                  <button type="button" onClick={() => moveFaq(idx, 1)} disabled={idx === faqs.length - 1} className="p-1.5 rounded-md hover:bg-neutral-200 disabled:opacity-30 cursor-pointer" title="Move down">
+                    <ArrowDown className="w-3.5 h-3.5" />
+                  </button>
+                  <button type="button" onClick={() => setFaqs((l) => l.filter((x) => x.id !== f.id))} className="p-1.5 rounded-md hover:bg-red-100 text-red-600 cursor-pointer" title="Delete">
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+
+          <button
+            type="button"
+            onClick={() => setFaqs((l) => [...l, { id: newId('faq'), question: '', answer: '', enabled: true }])}
+            className="text-xs font-bold text-[#800000] flex items-center gap-1.5 cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Add question</span>
           </button>
         </div>
       </section>
