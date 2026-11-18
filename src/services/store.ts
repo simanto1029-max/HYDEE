@@ -1916,7 +1916,9 @@ class StoreService {
     return s;
   }
 
-  updateSettings(newSettings: Partial<SiteSettings>) {
+  // Saves the settings on this device AND in Supabase (site_settings row "global") so every visitor/phone sees them.
+  // Returns what really happened, so the admin page can show a green "saved" or the real error instead of failing silently.
+  async updateSettings(newSettings: Partial<SiteSettings>): Promise<{ success: boolean; message: string }> {
     this.settings = { ...this.settings, ...newSettings };
     if (!this.settings.supportEmail || this.settings.supportEmail.includes('@hydee.com')) {
       this.settings.supportEmail = 'support@hydee.shop';
@@ -1924,15 +1926,26 @@ class StoreService {
     this.logAudit('Update Site Settings', 'Updated store configuration');
     this.persist();
 
-    if (isSupabaseConfigured && supabase) {
-      supabase
-        .from('site_settings')
-        .upsert({
-          id: 'global',
-          data: this.settings,
-          updated_at: new Date().toISOString(),
-        })
-        .then(() => {}, () => {});
+    if (!isSupabaseConfigured || !supabase) {
+      return {
+        success: false,
+        message:
+          'Saved on THIS browser only. This site is not connected to Supabase (VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY are missing), so other visitors cannot see it.',
+      };
+    }
+
+    try {
+      const { error } = await supabase.from('site_settings').upsert({
+        id: 'global',
+        data: this.settings,
+        updated_at: new Date().toISOString(),
+      });
+      if (error) {
+        return { success: false, message: `Saved on this browser only. Supabase refused the save: ${error.message}` };
+      }
+      return { success: true, message: 'Saved to the database. All visitors will see this.' };
+    } catch (err: any) {
+      return { success: false, message: `Saved on this browser only. Network error: ${err?.message || 'unknown'}` };
     }
   }
 
