@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowRight, Check, ShoppingBag } from 'lucide-react';
 import { TrustBadgeStrip } from '../components/TrustBadgeStrip';
+import { FaqSection } from '../components/FaqSection';
 import { buildTiers, isBundleEnabled, isTierFreeShipping } from '../services/pricing';
 import { ProductCard } from '../components/ProductCard';
 import { store } from '../services/store';
@@ -29,6 +30,7 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [colorPreviewImage, setColorPreviewImage] = useState<string | null>(null);
   const [selectedTierIndex, setSelectedTierIndex] = useState(1); // Default to Most Popular (Buy 2)
+  const [descExpanded, setDescExpanded] = useState(false);
 
   // Resolve product instantly from cache or Supabase in < 200ms
   useEffect(() => {
@@ -75,6 +77,7 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
       }
       setSelectedImageIndex(0);
       setColorPreviewImage(null);
+      setDescExpanded(false);
 
       // Always pre-select Most Popular tier by default
       const tiers = (product.bundleTiers && product.bundleTiers.length > 0)
@@ -266,7 +269,7 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                     <span className="font-bold text-neutral-900">{currentColorName}</span>
                   </div>
 
-                  <div className="flex items-center gap-3.5 overflow-x-auto no-scrollbar py-1">
+                  <div className="flex items-center gap-2.5 overflow-x-auto no-scrollbar py-1">
                     {colorList.map((col) => {
                       const isSelected = currentColorName === col.name;
                       const thumbnail = col.imageUrl || product.images[0];
@@ -288,13 +291,13 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                           className="flex flex-col items-center group cursor-pointer shrink-0 focus:outline-hidden"
                         >
                           <div
-                            className={`w-16 h-16 sm:w-20 sm:h-20 rounded-2xl p-0.5 relative transition-all ${
+                            className={`w-11 h-11 sm:w-12 sm:h-12 rounded-xl p-0.5 relative transition-all ${
                               isSelected
                                 ? 'border-2 border-emerald-500 ring-2 ring-emerald-400/40 shadow-md'
                                 : 'border-2 border-neutral-200/90 hover:border-neutral-400 shadow-xs'
                             }`}
                           >
-                            <div className="w-full h-full rounded-xl overflow-hidden bg-neutral-100 relative">
+                            <div className="w-full h-full rounded-lg overflow-hidden bg-neutral-100 relative">
                               {thumbnail ? (
                                 <img
                                   src={thumbnail}
@@ -313,15 +316,15 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
 
                             {/* Screenshot 4 Exact Match: Round green badge with white checkmark in top-right */}
                             {isSelected && (
-                              <div className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-emerald-500 rounded-full flex items-center justify-center text-white shadow-sm ring-2 ring-white">
-                                <Check className="w-3.5 h-3.5 stroke-[3]" />
+                              <div className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-emerald-500 rounded-full flex items-center justify-center text-white shadow-sm ring-2 ring-white">
+                                <Check className="w-2.5 h-2.5 stroke-[3]" />
                               </div>
                             )}
                           </div>
 
                           {/* Color name label below card */}
                           <span
-                            className={`text-xs sm:text-sm mt-1.5 font-medium transition-colors ${
+                            className={`text-[11px] sm:text-xs mt-1 font-medium transition-colors ${
                               isSelected ? 'text-slate-900 font-bold' : 'text-slate-600 group-hover:text-slate-900'
                             }`}
                           >
@@ -344,7 +347,7 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                 if (displaySizes.length === 0) return null;
                 return (
                   <div className="space-y-2 pt-1">
-                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                    <div className="flex flex-nowrap gap-1.5 overflow-x-auto no-scrollbar">
                       {displaySizes.map((sz) => {
                         const isSelected = selectedVariant?.size === sz;
                         return (
@@ -355,7 +358,7 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                               const matched = product.variants.find((v) => v.size === sz && (!selectedVariant?.color || v.color === selectedVariant.color)) || product.variants.find((v) => v.size === sz);
                               if (matched) setSelectedVariantId(matched.id);
                             }}
-                            className={`py-2 text-xs font-bold rounded-lg border transition-all cursor-pointer ${
+                            className={`flex-1 min-w-[2.4rem] px-1.5 py-1.5 text-[11px] sm:text-xs font-bold rounded-md border transition-all cursor-pointer whitespace-nowrap ${
                               isSelected
                                 ? 'border-neutral-950 bg-neutral-950 text-white shadow-xs'
                                 : 'border-neutral-200 bg-white text-neutral-800 hover:border-neutral-400'
@@ -465,10 +468,23 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                 <span className="w-1.5 h-1.5 rounded-full bg-[#800000]" />
                 <span>Product Details</span>
               </h4>
-              <div className="font-['Hind_Siliguri',sans-serif] text-[15px] sm:text-base md:text-[17px] text-neutral-800 leading-relaxed font-normal whitespace-pre-line">
+              <div
+                className={`font-['Hind_Siliguri',sans-serif] text-[15px] sm:text-base md:text-[17px] text-neutral-800 leading-relaxed font-normal whitespace-pre-line ${
+                  descExpanded ? '' : 'line-clamp-1'
+                }`}
+              >
                 {product.description || product.shortDescription}
               </div>
-              {product.specifications?.fabric && (
+              {((product.description || product.shortDescription || '').length > 0 || product.specifications?.fabric) && (
+                <button
+                  type="button"
+                  onClick={() => setDescExpanded((v) => !v)}
+                  className="text-xs font-bold text-[#800000] hover:text-black underline underline-offset-4 cursor-pointer"
+                >
+                  {descExpanded ? 'Show less' : 'Read more'}
+                </button>
+              )}
+              {descExpanded && product.specifications?.fabric && (
                 <div className="pt-2 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs sm:text-sm text-neutral-700 bg-neutral-50 p-3.5 rounded-xl border border-neutral-200/80">
                   <div>
                     <strong className="text-neutral-950 block font-semibold mb-0.5">Fabric:</strong>
@@ -484,6 +500,9 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
 
           </div>
         </div>
+
+        {/* FAQ box (middle) - edited in Admin > Offers & Badges */}
+        <FaqSection />
 
         {/* Similar & Other Recommended Products Section */}
         {similarProducts.length > 0 && (
