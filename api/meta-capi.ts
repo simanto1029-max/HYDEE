@@ -1,4 +1,3 @@
-
 import { createHash } from 'node:crypto';
 
 function sha256(value: string): string {
@@ -19,9 +18,10 @@ async function hashUserData(userData: any = {}) {
   }
 
   if (userData.ph) {
-    result.ph = [
-      sha256(String(userData.ph).replace(/\D/g, '')),
-    ];
+    // Meta wants the phone with country code and digits only: 01712345678 -> 8801712345678
+    let digits = String(userData.ph).replace(/\D/g, '');
+    if (digits.length === 11 && digits.startsWith('01')) digits = `88${digits}`;
+    if (digits) result.ph = [sha256(digits)];
   }
 
   if (userData.fn) {
@@ -30,6 +30,21 @@ async function hashUserData(userData: any = {}) {
 
   if (userData.ln) {
     result.ln = [sha256(normalize(userData.ln))];
+  }
+
+  // City / state / country (lower case, letters and numbers only, as Meta requires)
+  const clean = (v: unknown) => normalize(v).replace(/[^\p{L}\p{N}]/gu, '');
+
+  if (userData.ct && clean(userData.ct)) {
+    result.ct = [sha256(clean(userData.ct))];
+  }
+
+  if (userData.st && clean(userData.st)) {
+    result.st = [sha256(clean(userData.st))];
+  }
+
+  if (userData.country && clean(userData.country)) {
+    result.country = [sha256(clean(userData.country))];
   }
 
   if (userData.external_id) {
@@ -107,7 +122,19 @@ export default async function handler(req: any, res: any) {
         ? forwardedFor.split(',')[0].trim()
         : req.socket?.remoteAddress;
 
-    const hashedUserData = await hashUserData(userData);
+    // If the browser did not send the Facebook cookies, read them from the request itself
+    const cookieHeader = typeof req.headers?.cookie === 'string' ? req.headers.cookie : '';
+    const readCookie = (name: string) => {
+      const m = cookieHeader.match(new RegExp(`(?:^|;\\s*)${name}=([^;]+)`));
+      return m ? decodeURIComponent(m[1]) : undefined;
+    };
+    const mergedUserData = {
+      ...userData,
+      fbp: userData.fbp || readCookie('_fbp'),
+      fbc: userData.fbc || readCookie('_fbc'),
+    };
+
+    const hashedUserData = await hashUserData(mergedUserData);
 
     // Accept both HYDEE domains and reject unrelated URLs.
     let safeEventSourceUrl = 'https://hydee.shop/';
