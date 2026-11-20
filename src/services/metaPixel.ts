@@ -1,4 +1,3 @@
-
 /***
  * HYDEE Meta Pixel + Conversions API
  * Supports existing App.tsx, CheckoutView.tsx and ThankYouView.tsx.
@@ -23,6 +22,31 @@ type MetaUserData = {
   fbc?: string;
   external_id?: string;
 };
+
+// Event log shown in Admin > Promotional & Pixel
+export type PixelEventPayload = {
+  eventName: string;
+  eventId: string;
+  data?: Record<string, any>;
+  timestamp: string;
+};
+
+const eventLog: PixelEventPayload[] = [];
+
+function logEvent(eventName: string, data: Record<string, any>, eventId: string): void {
+  eventLog.unshift({
+    eventName,
+    eventId,
+    data,
+    timestamp: new Date().toLocaleTimeString(),
+  });
+  if (eventLog.length > 50) eventLog.length = 50;
+  try {
+    window.dispatchEvent(new Event('hydee_pixel_event'));
+  } catch {
+    // ignore
+  }
+}
 
 let activePixelId = '';
 
@@ -145,6 +169,8 @@ export const metaPixel = {
 
     const id = eventId || createEventId();
 
+    logEvent(eventName, customData, id);
+
     // Browser Pixel
     if (window.fbq) {
       window.fbq(
@@ -157,6 +183,37 @@ export const metaPixel = {
 
     // Server Conversions API
     sendCAPI(eventName, customData, userData, id);
+  },
+
+  // ---- Used only by the admin "Promotional & Pixel" page ----
+  getRecentEvents(): PixelEventPayload[] {
+    return [...eventLog];
+  },
+
+  clearLogs(): void {
+    eventLog.length = 0;
+  },
+
+  getConnectionStatus() {
+    const entries: any[] =
+      typeof performance !== 'undefined' && performance.getEntriesByType
+        ? (performance.getEntriesByType('resource') as any[])
+        : [];
+    const scriptEntry = entries.find((e) => String(e.name).includes('connect.facebook.net') && String(e.name).includes('fbevents'));
+    const trackingRequests = entries.filter(
+      (e) => /facebook\.com\/tr/.test(String(e.name))
+    );
+    const bootId = typeof window !== 'undefined' ? window.__hydeePixelBootId : undefined;
+
+    return {
+      snippetInPage: Boolean(bootId) || (typeof document !== 'undefined' && !!document.querySelector('script[src*="fbevents.js"]')),
+      bootPixelId: bootId ? String(bootId) : '',
+      scriptRequestSeen: Boolean(scriptEntry),
+      scriptHttpStatus: scriptEntry && scriptEntry.responseStatus ? Number(scriptEntry.responseStatus) : 0,
+      trackingRequestsSeen: trackingRequests.length,
+      scriptLoaded: typeof window !== 'undefined' && Boolean(window.fbq && (window.fbq as any).callMethod),
+      pixelsInitialized: (typeof window !== 'undefined' && window.__hydeeInitializedPixelIds) || [],
+    };
   },
 
   // Track a completed order.
