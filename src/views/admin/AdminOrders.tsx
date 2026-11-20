@@ -22,6 +22,91 @@ import {
 } from 'lucide-react';
 import { store } from '../../services/store';
 import { Order, OrderStatus, CheckoutLead } from '../../types';
+import { parseLocation } from '../../services/bdLocations';
+
+// Copy text to the clipboard. Falls back to the old method when the browser blocks navigator.clipboard.
+const copyToClipboard = async (text: string): Promise<boolean> => {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    // fall through to the fallback below
+  }
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    return ok;
+  } catch {
+    return false;
+  }
+};
+
+// Small "Copy" button that shows a green tick for 1.5 seconds after copying
+const CopyButton: React.FC<{ text: string; label?: string; strong?: boolean }> = ({ text, label = 'Copy', strong }) => {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={async () => {
+        const ok = await copyToClipboard(text);
+        if (ok) {
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1500);
+        }
+      }}
+      className={`shrink-0 inline-flex items-center gap-1 rounded-md text-[11px] font-semibold transition-colors cursor-pointer ${
+        strong
+          ? 'px-3 py-1.5 bg-[#800000] hover:bg-[#600000] text-white'
+          : 'px-2 py-1 bg-white border border-neutral-200 hover:bg-neutral-100 text-neutral-700'
+      } ${copied ? '!bg-emerald-600 !border-emerald-600 !text-white' : ''}`}
+    >
+      {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+      <span>{copied ? 'Copied!' : label}</span>
+    </button>
+  );
+};
+
+// One line: label + value + its own copy button
+const CopyRow: React.FC<{ label: string; value: string; mono?: boolean }> = ({ label, value, mono }) => (
+  <div className="flex items-start justify-between gap-3 py-1.5 border-b border-neutral-200/70 last:border-0">
+    <div className="min-w-0">
+      <span className="text-neutral-400 uppercase text-[10px] font-semibold block">{label}</span>
+      <p className={`text-neutral-900 font-semibold break-words ${mono ? 'font-mono tabular-nums' : ''}`}>{value || '—'}</p>
+    </div>
+    {value ? <CopyButton text={value} /> : null}
+  </div>
+);
+
+// The text that "Copy All" puts in the clipboard (ready to paste into a courier panel)
+const buildOrderCopyText = (o: Order): string => {
+  const loc = parseLocation(o.district);
+  const lines = [
+    `Order: ${o.orderNumber}`,
+    `Name: ${o.customerName}`,
+    `Phone: ${o.customerPhone}`,
+    `Address: ${o.deliveryAddress}`,
+  ];
+  if (loc) {
+    lines.push(`Thana: ${loc.thana}`, `District: ${loc.district}`, `Division: ${loc.division}`);
+  } else if (o.district) {
+    lines.push(`District: ${o.district}`);
+  }
+  lines.push(`Collect (COD): ৳${(o.remainingCodAmount || 0).toLocaleString()}`);
+  return lines.join('\n');
+};
+
+// Full one-line address: "House 5, Road 3, Dhanmondi, Dhaka, Dhaka Division"
+const buildFullAddress = (o: Order): string =>
+  [o.deliveryAddress, o.district].filter((x) => x && x.trim()).join(', ');
 
 export const formatOrderDateTime = (dateString?: string): string => {
   if (!dateString) return 'Just now';
@@ -846,20 +931,37 @@ export const AdminOrders: React.FC = () => {
             </div>
 
             <div className="overflow-y-auto p-6 space-y-6 text-xs flex-1 touch-scroll">
-              {/* Customer & Address */}
-              <div className="grid grid-cols-2 gap-4 p-4 bg-neutral-50 rounded-xl">
-                <div>
-                  <span className="text-neutral-400 uppercase text-[10px] font-semibold block">Customer Details</span>
-                  <p className="font-bold text-neutral-900 mt-1">{selectedOrder.customerName}</p>
-                  <p className="font-mono text-neutral-600 tabular-nums">{selectedOrder.customerPhone}</p>
-                  {selectedOrder.customerEmail && <p className="text-neutral-500">{selectedOrder.customerEmail}</p>}
-                </div>
-                <div>
-                  <span className="text-neutral-400 uppercase text-[10px] font-semibold block">Delivery Destination</span>
-                  <p className="text-neutral-800 mt-1">{selectedOrder.deliveryAddress}</p>
-                  <p className="text-neutral-600 font-semibold">{selectedOrder.district} ({selectedOrder.zoneName})</p>
-                </div>
-              </div>
+              {/* Customer & Address (each line has its own Copy button, plus Copy All) */}
+              {(() => {
+                const loc = parseLocation(selectedOrder.district);
+                return (
+                  <div className="p-4 bg-neutral-50 rounded-xl">
+                    <div className="flex items-center justify-between gap-3 mb-1">
+                      <span className="text-neutral-500 uppercase text-[10px] font-bold tracking-wider">
+                        Customer & Delivery Details
+                      </span>
+                      <CopyButton text={buildOrderCopyText(selectedOrder)} label="Copy All" strong />
+                    </div>
+                    <CopyRow label="Name" value={selectedOrder.customerName} />
+                    <CopyRow label="Phone" value={selectedOrder.customerPhone} mono />
+                    <CopyRow label="Address (local)" value={selectedOrder.deliveryAddress} />
+                    {loc ? (
+                      <>
+                        <CopyRow label="Thana / Upazila" value={loc.thana} />
+                        <CopyRow label="District" value={loc.district} />
+                        <CopyRow label="Division" value={loc.division} />
+                      </>
+                    ) : (
+                      <CopyRow label="District" value={selectedOrder.district} />
+                    )}
+                    <CopyRow label="Full Address" value={buildFullAddress(selectedOrder)} />
+                    {selectedOrder.customerEmail && <CopyRow label="Email" value={selectedOrder.customerEmail} />}
+                    <p className="text-[11px] text-neutral-500 font-semibold mt-1.5">
+                      Delivery zone: {selectedOrder.zoneName}
+                    </p>
+                  </div>
+                );
+              })()}
 
               {/* Courier Dispatching Status Box */}
               <div className="p-4 border border-neutral-200 rounded-xl space-y-3">
