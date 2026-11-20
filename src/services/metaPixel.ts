@@ -21,6 +21,9 @@ type MetaUserData = {
   fbp?: string;
   fbc?: string;
   external_id?: string;
+  ct?: string;
+  st?: string;
+  country?: string;
 };
 
 // Event log shown in Admin > Promotional & Pixel
@@ -81,6 +84,54 @@ function loadPixel(): void {
   script.src = 'https://connect.facebook.net/en_US/fbevents.js';
 
   document.head.appendChild(script);
+}
+
+function readCookie(name: string): string | undefined {
+  try {
+    const m = document.cookie.match(new RegExp(`(?:^|;\\s*)${name}=([^;]+)`));
+    return m ? decodeURIComponent(m[1]) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+// Anonymous visitor id (kept in this browser) so Meta can match the visitor's events together
+function getVisitorId(): string | undefined {
+  try {
+    let id = localStorage.getItem('hydee_visitor_id');
+    if (!id) {
+      id = `v_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+      localStorage.setItem('hydee_visitor_id', id);
+    }
+    return id;
+  } catch {
+    return undefined;
+  }
+}
+
+// Customer details saved when an order is placed (used to improve matching for the next events)
+function getSavedCustomer(): MetaUserData {
+  try {
+    const raw = localStorage.getItem('hydee_pixel_customer');
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+// Everything the server (Conversions API) needs to recognise the person behind the event
+function buildUserData(extra: MetaUserData): MetaUserData {
+  const base: MetaUserData = {
+    fbp: readCookie('_fbp'),
+    fbc: readCookie('_fbc'),
+    external_id: getVisitorId(),
+    ...getSavedCustomer(),
+    ...extra,
+  };
+  Object.keys(base).forEach((k) => {
+    if (!(base as any)[k]) delete (base as any)[k];
+  });
+  return base;
 }
 
 function sendCAPI(
@@ -181,8 +232,8 @@ export const metaPixel = {
       );
     }
 
-    // Server Conversions API
-    sendCAPI(eventName, customData, userData, id);
+    // Server Conversions API (with Facebook cookies, visitor id and saved customer details)
+    sendCAPI(eventName, customData, buildUserData(userData), id);
   },
 
   // ---- Used only by the admin "Promotional & Pixel" page ----
@@ -226,7 +277,8 @@ export const metaPixel = {
       id: string;
       quantity: number;
       price: number;
-    }> = []
+    }> = [],
+    customer?: { name?: string; phone?: string; district?: string; division?: string }
   ): void {
     if (typeof window === 'undefined' || !orderNumber) {
       return;
@@ -262,10 +314,27 @@ export const metaPixel = {
     // Stable event ID enables browser/server deduplication.
     const eventId = `purchase_${orderNumber}`;
 
+    // Customer details for Meta matching (the server hashes them before sending)
+    const userData: MetaUserData = {};
+    if (customer) {
+      const nameParts = String(customer.name || '').trim().split(/\s+/).filter(Boolean);
+      if (customer.phone) userData.ph = customer.phone;
+      if (nameParts[0]) userData.fn = nameParts[0];
+      if (nameParts.length > 1) userData.ln = nameParts.slice(1).join(' ');
+      if (customer.district) userData.ct = customer.district;
+      if (customer.division) userData.st = customer.division;
+      userData.country = 'bd';
+      try {
+        localStorage.setItem('hydee_pixel_customer', JSON.stringify(userData));
+      } catch {
+        // ignore
+      }
+    }
+
     this.track(
       'Purchase',
       customData,
-      {},
+      userData,
       eventId
     );
   },
