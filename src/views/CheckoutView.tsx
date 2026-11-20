@@ -17,10 +17,18 @@ import {
   Clock,
   Trash2,
   Gift,
+  ChevronDown,
 } from 'lucide-react';
 import { store } from '../services/store';
 import { metaPixel } from '../services/metaPixel';
 import { describeOffer } from '../services/pricing';
+import {
+  getDivisions,
+  getDistricts,
+  getThanas,
+  isInsideDhakaMetro,
+  formatLocation,
+} from '../services/bdLocations';
 import { CartItem, Order } from '../types';
 
 interface CheckoutViewProps {
@@ -42,15 +50,29 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
 
   // Delivery Zones
   const zones = store.getDeliveryZones();
-  const [selectedZoneId, setSelectedZoneId] = useState<string>(zones[0]?.id || 'zone-dhaka');
-  const selectedZone = zones.find((z) => z.id === selectedZoneId) || zones[0];
+
+  // Customer location: Division -> District -> Thana (all three are required)
+  const [division, setDivision] = useState('');
+  const [districtName, setDistrictName] = useState('');
+  const [thana, setThana] = useState('');
+  const divisionOptions = getDivisions();
+  const districtOptions = getDistricts(division);
+  const thanaOptions = getThanas(division, districtName);
+  const locationChosen = Boolean(division && districtName && thana);
+
+  // The delivery zone (and charge) is set automatically from the location:
+  // Dhaka city thanas = Inside Dhaka, everything else = Outside Dhaka
+  const insideZone = zones.find((z) => /inside/i.test(z.name)) || zones[0];
+  const outsideZone = zones.find((z) => z.id !== insideZone?.id) || zones[0];
+  const selectedZone =
+    locationChosen && !isInsideDhakaMetro(division, districtName, thana) ? outsideZone : insideZone;
+  const selectedZoneId = selectedZone?.id;
 
   // Recipient form inputs (Email address box removed per user request)
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [phone, setPhone] = useState('');
   const [deliveryAddress, setDeliveryAddress] = useState('');
-  const [district, setDistrict] = useState('Dhaka');
   const [deliveryNotes, setDeliveryNotes] = useState('');
 
   // Exactly 2 Payment Options:
@@ -83,7 +105,9 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
       store.saveCheckoutLead({
         name: `${firstName.trim()} ${lastName.trim()}`.trim(),
         phone: cleanLeadPhone,
-        address: deliveryAddress,
+        address: [deliveryAddress.trim(), thana, districtName, division ? `${division} Division` : '']
+          .filter(Boolean)
+          .join(', '),
         items: checkoutItems.map((i) => ({
           name: i.name,
           quantity: i.quantity,
@@ -96,7 +120,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
       });
     }, 1500);
     return () => clearTimeout(timer);
-  }, [phone, firstName, lastName, deliveryAddress, checkoutItems.length, selectedZoneId, pendingOrder]);
+  }, [phone, firstName, lastName, deliveryAddress, division, districtName, thana, checkoutItems.length, selectedZoneId, pendingOrder]);
 
   // Calculations (same functions the cart page and the saved order use)
   const subtotal = pricing.subtotal; // after Buy 2 / Buy 3
@@ -201,18 +225,36 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
     e.preventDefault();
     setError(null);
 
+    // Show the error and bring it into view (the error box is at the top of the page)
+    const showError = (msg: string) => {
+      setError(msg);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
     const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
     if (!fullName) {
-      setError('Please provide your full name.');
+      showError('Please provide your full name.');
       return;
     }
     const cleanPhone = phone.trim();
     if (!cleanPhone.match(/^01[3-9]\d{8}$/)) {
-      setError('Please provide a valid 11-digit Bangladesh mobile number (e.g. 017xxxxxxxx).');
+      showError('Please provide a valid 11-digit Bangladesh mobile number (e.g. 017xxxxxxxx).');
       return;
     }
-    if (!deliveryAddress.trim()) {
-      setError('Please provide your delivery address (House / Road / Area).');
+    if (!division) {
+      showError('অনুগ্রহ করে আপনার বিভাগ (Division) সিলেক্ট করুন।');
+      return;
+    }
+    if (!districtName) {
+      showError('অনুগ্রহ করে আপনার জেলা (District) সিলেক্ট করুন।');
+      return;
+    }
+    if (!thana) {
+      showError('অনুগ্রহ করে আপনার থানা / উপজেলা (Thana) সিলেক্ট করুন।');
+      return;
+    }
+    if (deliveryAddress.trim().length < 5) {
+      showError('অনুগ্রহ করে আপনার ডেলিভারি ঠিকানা লিখুন (বাড়ি / রোড / এলাকা / ল্যান্ডমার্ক)।');
       return;
     }
 
@@ -223,7 +265,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
     const cooldown = await store.checkOrderCooldown(cleanPhone);
     if (cooldown.blocked) {
       setIsSubmitting(false);
-      setError(
+      showError(
         `এই মোবাইল নম্বর থেকে একটু আগেই অর্ডার করা হয়েছে। অনুগ্রহ করে ${cooldown.minutesLeft} মিনিট পর আবার চেষ্টা করুন, অথবা আমাদের কল করে জানান। (An order was just placed with this number. Please try again in ${cooldown.minutesLeft} min.)`
       );
       return;
@@ -233,7 +275,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
       customerName: fullName,
       customerPhone: cleanPhone,
       deliveryAddress: deliveryAddress.trim(),
-      district: district.trim() || (selectedZone.name.includes('Inside') ? 'Dhaka' : 'Outside Dhaka'),
+      district: formatLocation(division, districtName, thana),
       zoneId: selectedZone.id,
       notes: deliveryNotes.trim() || undefined,
       items: checkoutItems,
@@ -245,7 +287,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
     setIsSubmitting(false);
 
     if (!result.success || !result.order) {
-      setError(result.error || 'Failed to place booking.');
+      showError(result.error || 'Failed to place booking.');
       return;
     }
 
@@ -408,7 +450,97 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                   </div>
                 </div>
 
-                {/* Delivery Address Box */}
+                {/* Division / District / Thana (all required) */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                  {/* Division */}
+                  <div className="border border-neutral-300 rounded-xl p-3 bg-white focus-within:border-black focus-within:ring-1 focus-within:ring-black transition-all flex items-start gap-2.5">
+                    <MapPin className="w-4 h-4 text-black mt-0.5 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <label className="block text-[11px] uppercase font-bold text-black tracking-wider">
+                        Division *
+                      </label>
+                      <div className="relative">
+                        <select
+                          required
+                          value={division}
+                          onChange={(e) => {
+                            setDivision(e.target.value);
+                            setDistrictName('');
+                            setThana('');
+                          }}
+                          className="w-full appearance-none text-xs sm:text-sm font-semibold text-black focus:outline-hidden bg-transparent mt-0.5 pr-5 cursor-pointer"
+                        >
+                          <option value="">Select Division</option>
+                          {divisionOptions.map((d) => (
+                            <option key={d} value={d}>
+                              {d}
+                            </option>
+                          ))}
+                        </select>
+                        <ChevronDown className="w-3.5 h-3.5 text-black absolute right-0 top-1.5 pointer-events-none" />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* District */}
+                  <div className="border border-neutral-300 rounded-xl p-3 bg-white focus-within:border-black focus-within:ring-1 focus-within:ring-black transition-all flex items-start gap-2.5">
+                    <MapPin className="w-4 h-4 text-black mt-0.5 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <label className="block text-[11px] uppercase font-bold text-black tracking-wider">
+                        District *
+                      </label>
+                      <div className="relative">
+                        <select
+                          required
+                          value={districtName}
+                          disabled={!division}
+                          onChange={(e) => {
+                            setDistrictName(e.target.value);
+                            setThana('');
+                          }}
+                          className="w-full appearance-none text-xs sm:text-sm font-semibold text-black focus:outline-hidden bg-transparent mt-0.5 pr-5 cursor-pointer disabled:cursor-not-allowed disabled:text-neutral-400"
+                        >
+                          <option value="">{division ? 'Select District' : 'Select Division first'}</option>
+                          {districtOptions.map((d) => (
+                            <option key={d} value={d}>
+                              {d}
+                            </option>
+                          ))}
+                        </select>
+                        <ChevronDown className="w-3.5 h-3.5 text-black absolute right-0 top-1.5 pointer-events-none" />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Thana / Upazila */}
+                  <div className="border border-neutral-300 rounded-xl p-3 bg-white focus-within:border-black focus-within:ring-1 focus-within:ring-black transition-all flex items-start gap-2.5">
+                    <MapPin className="w-4 h-4 text-black mt-0.5 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <label className="block text-[11px] uppercase font-bold text-black tracking-wider">
+                        Thana / Upazila *
+                      </label>
+                      <div className="relative">
+                        <select
+                          required
+                          value={thana}
+                          disabled={!districtName}
+                          onChange={(e) => setThana(e.target.value)}
+                          className="w-full appearance-none text-xs sm:text-sm font-semibold text-black focus:outline-hidden bg-transparent mt-0.5 pr-5 cursor-pointer disabled:cursor-not-allowed disabled:text-neutral-400"
+                        >
+                          <option value="">{districtName ? 'Select Thana' : 'Select District first'}</option>
+                          {thanaOptions.map((t) => (
+                            <option key={t} value={t}>
+                              {t}
+                            </option>
+                          ))}
+                        </select>
+                        <ChevronDown className="w-3.5 h-3.5 text-black absolute right-0 top-1.5 pointer-events-none" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Delivery Address Box (local address only: house, road, area, landmark) */}
                 <div className="border border-neutral-300 rounded-xl p-3.5 bg-white focus-within:border-black focus-within:ring-1 focus-within:ring-black transition-all flex items-start gap-2.5">
                   <MapPin className="w-4 h-4 text-black mt-0.5 shrink-0" />
                   <div className="flex-1">
@@ -420,7 +552,8 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                       required
                       value={deliveryAddress}
                       onChange={(e) => setDeliveryAddress(e.target.value)}
-                      className="w-full text-xs sm:text-sm font-semibold text-black focus:outline-hidden bg-transparent placeholder:text-neutral-500 mt-0.5 resize-none"
+                      placeholder="যেখানে প্রোডাক্ট রিসিভ করবেন সেই লোকাল ঠিকানা লিখুন: বাড়ি/ফ্ল্যাট নং, রোড, এলাকা/গ্রাম, ল্যান্ডমার্ক"
+                      className="w-full text-xs sm:text-sm font-semibold text-black focus:outline-hidden bg-transparent placeholder:text-neutral-400 placeholder:font-normal mt-0.5 resize-none"
                     />
                   </div>
                 </div>
@@ -436,14 +569,10 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                       return (
                         <div
                           key={zone.id}
-                          onClick={() => {
-                            setSelectedZoneId(zone.id);
-                            if (zone.name.includes('Inside')) setDistrict('Dhaka');
-                          }}
-                          className={`p-3.5 rounded-xl border cursor-pointer transition-all ${
+                          className={`p-3.5 rounded-xl border transition-all ${
                             isSelected
                               ? 'border-2 border-black bg-neutral-50 shadow-xs'
-                              : 'border-neutral-300 bg-white hover:border-black'
+                              : 'border-neutral-300 bg-white opacity-60'
                           }`}
                         >
                           <div className="flex justify-between items-center text-xs">
@@ -456,6 +585,9 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                       );
                     })}
                   </div>
+                  <p className="text-[11px] text-neutral-600 font-medium mt-2">
+                    ডেলিভারি চার্জ আপনার সিলেক্ট করা থানা অনুযায়ী নিজে থেকেই সেট হবে।
+                  </p>
                 </div>
               </div>
             </div>
