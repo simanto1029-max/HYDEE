@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { store } from '../services/store';
 import { metaPixel } from '../services/metaPixel';
+import { parseLocation } from '../services/bdLocations';
 
 interface ThankYouViewProps {
   orderNumber: string;
@@ -44,7 +45,13 @@ export const ThankYouView: React.FC<ThankYouViewProps> = ({ orderNumber, onNavig
           order.totalAmount,
           'BDT',
           order.items.reduce((sum, i) => sum + i.quantity, 0),
-          order.items.map((i) => ({ id: i.productId, quantity: i.quantity, price: i.price }))
+          order.items.map((i) => ({ id: i.productId, quantity: i.quantity, price: i.price })),
+          {
+            name: order.customerName,
+            phone: order.customerPhone,
+            district: parseLocation(order.district)?.district || order.district,
+            division: parseLocation(order.district)?.division,
+          }
         );
         hasFiredPixel.current = true;
       }
