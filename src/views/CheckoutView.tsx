@@ -49,6 +49,10 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
   const checkoutItems = items;
 
   // Delivery Zones
+  // Re-draw when the store finishes loading the latest delivery fees from the database
+  const [, setStoreTick] = useState(0);
+  useEffect(() => store.subscribe(() => setStoreTick((t) => t + 1)), []);
+
   const zones = store.getDeliveryZones();
 
   // Customer location: Division -> District -> Thana (all three are required)
