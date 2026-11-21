@@ -100,6 +100,7 @@ class StoreService {
   private cart: CartItem[] = [];
   private coupons: Coupon[] = [];
   private zones: DeliveryZone[] = [];
+  private zonesUploadTimer: any = null;
   private heroSlides: HeroSlide[] = [];
   private settings: SiteSettings = INITIAL_SITE_SETTINGS;
   private promoPopup: PromotionalPopup = INITIAL_PROMO_POPUP;
@@ -380,6 +381,35 @@ class StoreService {
 
         if (!settingsError && settingsData && settingsData.data) {
           this.settings = { ...this.settings, ...settingsData.data };
+        }
+      } catch (err) {}
+      this.notify();
+
+      // 0b. Delivery zone fees (Inside / Outside Dhaka) set in Admin > Settings, so every visitor sees the same charge
+      try {
+        const { data: zonesRow, error: zonesError } = await supabase
+          .from('site_settings')
+          .select('*')
+          .eq('id', 'delivery_zones')
+          .maybeSingle();
+
+        const remoteZones = zonesRow?.data?.zones;
+        const isValid =
+          Array.isArray(remoteZones) &&
+          remoteZones.length > 0 &&
+          remoteZones.every((z: any) => z && typeof z.id === 'string' && typeof z.name === 'string' && Number.isFinite(Number(z.advanceFee)));
+
+        if (!zonesError && isValid) {
+          this.zones = remoteZones.map((z: any) => ({ ...z, advanceFee: Number(z.advanceFee) }));
+          try {
+            localStorage.setItem(STORAGE_KEYS.ZONES, JSON.stringify(this.zones));
+          } catch {
+            // ignore
+          }
+        } else if (!zonesError && !zonesRow) {
+          // Nothing saved in the database yet: if this browser (the admin) has changed the fees, upload them once
+          const changed = JSON.stringify(this.zones) !== JSON.stringify(INITIAL_DELIVERY_ZONES);
+          if (changed) this.uploadZonesToSupabase();
         }
       } catch (err) {}
       this.notify();
@@ -1151,6 +1181,30 @@ class StoreService {
     }
     this.logAudit('Delivery Settings', `Updated delivery zone: ${zone.name} fee to ৳${zone.advanceFee}`);
     this.persist();
+    this.scheduleZonesUpload();
+  }
+
+  // The admin types the fee (one save per key press), so wait until typing stops, then save once to Supabase
+  private scheduleZonesUpload() {
+    if (this.zonesUploadTimer) clearTimeout(this.zonesUploadTimer);
+    this.zonesUploadTimer = setTimeout(() => {
+      this.zonesUploadTimer = null;
+      this.uploadZonesToSupabase();
+    }, 800);
+  }
+
+  private async uploadZonesToSupabase() {
+    if (!isSupabaseConfigured || !supabase) return;
+    try {
+      const { error } = await supabase.from('site_settings').upsert({
+        id: 'delivery_zones',
+        data: { zones: this.zones },
+        updated_at: new Date().toISOString(),
+      });
+      if (error) console.error('Supabase delivery zones save error:', error.message);
+    } catch (err: any) {
+      console.error('Supabase delivery zones network error:', err?.message || err);
+    }
   }
 
   // --- Cart ---
