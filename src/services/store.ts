@@ -18,7 +18,6 @@ import {
   ALL_DEMO_PRODUCTS,
   INITIAL_CATEGORIES,
   INITIAL_DELIVERY_ZONES,
-  INITIAL_HERO_SLIDES,
   INITIAL_PRODUCTS,
   INITIAL_PROMO_POPUP,
   INITIAL_SITE_SETTINGS,
@@ -83,7 +82,7 @@ const STORAGE_KEYS = {
   ORDERS: 'hydee_orders_v2',
   CART: 'hydee_cart_v2',
   ZONES: 'hydee_zones_v2',
-  HERO: 'hydee_hero_v5',
+  HERO: 'hydee_hero_v6',
   SETTINGS: 'hydee_settings_v2',
   PROMO: 'hydee_promo_v2',
   COUPONS: 'hydee_coupons_v2',
@@ -270,7 +269,7 @@ class StoreService {
       this.zones = storedZones ? JSON.parse(storedZones) : INITIAL_DELIVERY_ZONES;
 
       const storedHero = localStorage.getItem(STORAGE_KEYS.HERO);
-      this.heroSlides = storedHero ? JSON.parse(storedHero) : INITIAL_HERO_SLIDES;
+      this.heroSlides = storedHero ? JSON.parse(storedHero) : [];
 
       const storedSettings = localStorage.getItem(STORAGE_KEYS.SETTINGS);
       this.settings = storedSettings ? { ...INITIAL_SITE_SETTINGS, ...JSON.parse(storedSettings) } : INITIAL_SITE_SETTINGS;
@@ -312,7 +311,7 @@ class StoreService {
       this.products = INITIAL_PRODUCTS;
       this.categories = INITIAL_CATEGORIES;
       this.zones = INITIAL_DELIVERY_ZONES;
-      this.heroSlides = INITIAL_HERO_SLIDES;
+      this.heroSlides = [];
       this.settings = INITIAL_SITE_SETTINGS;
       this.promoPopup = INITIAL_PROMO_POPUP;
       this.coupons = INITIAL_COUPONS;
@@ -410,6 +409,25 @@ class StoreService {
           // Nothing saved in the database yet: if this browser (the admin) has changed the fees, upload them once
           const changed = JSON.stringify(this.zones) !== JSON.stringify(INITIAL_DELIVERY_ZONES);
           if (changed) this.uploadZonesToSupabase();
+        }
+      } catch (err) {}
+      this.notify();
+
+      // 0c. Homepage hero banners chosen in Admin > Homepage (saved as the "hero_slides" row)
+      try {
+        const { data: heroRow, error: heroError } = await supabase
+          .from('site_settings')
+          .select('*')
+          .eq('id', 'hero_slides')
+          .maybeSingle();
+        const remoteSlides = heroRow?.data?.slides;
+        if (!heroError && Array.isArray(remoteSlides)) {
+          this.heroSlides = remoteSlides;
+          try {
+            localStorage.setItem(STORAGE_KEYS.HERO, JSON.stringify(this.heroSlides));
+          } catch {
+            // ignore
+          }
         }
       } catch (err) {}
       this.notify();
@@ -518,7 +536,23 @@ class StoreService {
         .order('created_at', { ascending: false });
 
       if (!orderError && orderData && orderData.length > 0) {
-        this.orders = orderData.map((o: any) => ({
+        this.orders = orderData.map((o: any) => {
+          const timeline: any[] = Array.isArray(o.timeline) ? o.timeline : [];
+          // The database has no column for payment type / dispatch dates, so they are rebuilt from the order timeline
+          let isFullPayment = false;
+          let dispatchedAt: string | undefined;
+          let deliveredAt: string | undefined;
+          for (const t of timeline) {
+            if (t.status === 'ORDER_INITIATED' || t.status === 'FULL_PAYMENT_CONFIRMED') isFullPayment = true;
+            if (t.status === 'CONVERTED_TO_COD') isFullPayment = false;
+            if (t.status === 'SHIPPED') dispatchedAt = t.timestamp;
+            if (t.status === 'DELIVERED') deliveredAt = t.timestamp;
+          }
+          return {
+          paymentType: (isFullPayment ? 'full_prepaid' : 'advance_cod') as 'advance_cod' | 'full_prepaid',
+          isFullPayment,
+          dispatchedAt,
+          deliveredAt,
           id: o.id,
           orderNumber: o.order_number,
           customerName: o.customer_name,
@@ -545,9 +579,10 @@ class StoreService {
           isTestOrder: Boolean(o.is_test_order),
           createdAt: o.created_at,
           updatedAt: o.updated_at,
-          timeline: Array.isArray(o.timeline) ? o.timeline : [],
+          timeline,
           items: Array.isArray(o.items) ? o.items : [],
-        }));
+          };
+        });
       }
 
       this.persist();
@@ -1488,6 +1523,31 @@ class StoreService {
     return { success: true, order: newOrder };
   }
 
+  // Saves the changed order fields (status, payment, courier, timeline) in Supabase so a refresh or another phone sees the same status
+  private async pushOrderUpdate(order: Order) {
+    if (!isSupabaseConfigured || !supabase) return;
+    try {
+      const { error } = await supabase
+        .from('orders')
+        .update({
+          status: order.status,
+          payment_status: order.paymentStatus,
+          advance_payment_method: order.advancePaymentMethod ?? null,
+          transaction_id: order.transactionId ?? null,
+          verified_at: order.verifiedAt ?? null,
+          courier_name: order.courierName ?? null,
+          courier_tracking_code: order.courierTrackingCode ?? null,
+          remaining_cod_amount: order.remainingCodAmount,
+          timeline: order.timeline,
+          updated_at: order.updatedAt || new Date().toISOString(),
+        })
+        .eq('order_number', order.orderNumber);
+      if (error) console.error('Supabase order update error:', error.message);
+    } catch (err: any) {
+      console.error('Supabase order update network error:', err?.message || err);
+    }
+  }
+
   // Payment Verification Callback (Only marks confirmed when verified)
   verifyAdvancePayment(
     orderNumberOrId: string,
@@ -1567,6 +1627,7 @@ class StoreService {
     );
 
     this.persist();
+    this.pushOrderUpdate(order);
     return { success: true, order };
   }
 
@@ -1754,6 +1815,7 @@ class StoreService {
     });
     this.logAudit('Payment Reference Submitted', `Order ${order.orderNumber}: ${method.toUpperCase()} TrxID ${trx}`);
     this.persist();
+    this.pushOrderUpdate(order);
     return { success: true, order };
   }
 
@@ -1779,6 +1841,7 @@ class StoreService {
     });
     this.logAudit('Payment Rejected', `Order ${order.orderNumber}: TrxID ${oldTrx || ''} rejected`);
     this.persist();
+    this.pushOrderUpdate(order);
     return { success: true };
   }
 
@@ -1829,6 +1892,7 @@ class StoreService {
     });
     this.logAudit('Lead Converted To COD', `Order ${order.orderNumber} confirmed as Cash on Delivery`);
     this.persist();
+    this.pushOrderUpdate(order);
     return { success: true, order };
   }
 
@@ -1878,6 +1942,7 @@ class StoreService {
 
     this.logAudit('Update Order Status', `Order ${order.orderNumber} changed to ${newStatus}`);
     this.persist();
+    this.pushOrderUpdate(order);
   }
 
   dispatchOrder(
@@ -1905,6 +1970,7 @@ class StoreService {
 
     this.logAudit('Dispatch Order', `Order ${order.orderNumber} dispatched via ${courierName} (${order.courierTrackingCode})`);
     this.persist();
+    this.pushOrderUpdate(order);
     return true;
   }
 
@@ -1927,6 +1993,7 @@ class StoreService {
 
     this.logAudit('Order Delivered', `Order ${order.orderNumber} marked delivered. COD ৳${order.remainingCodAmount} collected.`);
     this.persist();
+    this.pushOrderUpdate(order);
     return true;
   }
 
@@ -1955,10 +2022,31 @@ class StoreService {
     return [...this.heroSlides].sort((a, b) => a.order - b.order);
   }
 
-  saveHeroSlides(slides: HeroSlide[]) {
+  // Saves the hero banners on this device AND in Supabase so every visitor sees them.
+  async saveHeroSlides(slides: HeroSlide[]): Promise<{ success: boolean; message: string }> {
     this.heroSlides = slides;
     this.logAudit('Update Hero Slider', 'Updated homepage hero slides');
-    this.persist();
+    try {
+      localStorage.setItem(STORAGE_KEYS.HERO, JSON.stringify(this.heroSlides));
+    } catch {
+      // the pictures may be too big for this browser's storage; the database copy below is the real one
+    }
+    this.notify();
+
+    if (!isSupabaseConfigured || !supabase) {
+      return { success: true, message: 'Saved on this device only (Supabase is not connected).' };
+    }
+    try {
+      const { error } = await supabase.from('site_settings').upsert({
+        id: 'hero_slides',
+        data: { slides: this.heroSlides },
+        updated_at: new Date().toISOString(),
+      });
+      if (error) return { success: false, message: `Database save failed: ${error.message}` };
+      return { success: true, message: 'Saved. Everyone will see the new banner now.' };
+    } catch (err: any) {
+      return { success: false, message: `Database save failed: ${err?.message || 'network error'}` };
+    }
   }
 
   // --- Site Settings & Marketing ---
@@ -2127,7 +2215,7 @@ class StoreService {
     this.orders = [];
     this.cart = [];
     this.zones = INITIAL_DELIVERY_ZONES;
-    this.heroSlides = INITIAL_HERO_SLIDES;
+    this.heroSlides = [];
     this.settings = INITIAL_SITE_SETTINGS;
     this.promoPopup = INITIAL_PROMO_POPUP;
     this.auditLogs = [];
