@@ -213,6 +213,8 @@ export interface HeroSlide {
   desktopImage: string;
   mobileImage: string;
   align: 'left' | 'center' | 'right';
+  // Text colour used when a headline / button is written on top of the picture
+  textTheme?: 'light' | 'dark';
   isActive: boolean;
   order: number;
 }
