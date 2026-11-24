@@ -43,7 +43,18 @@ export const HeroSlider: React.FC<HeroSliderProps> = ({ slides = [], onNavigate 
 
   const slide = slides[safeIndex];
   const link = (slide.ctaLink || '').trim();
-  const hasText = Boolean((slide.title || '').trim() || (slide.subtitle || '').trim() || (slide.ctaText || '').trim());
+  // Text on the picture only appears when the admin switched it on (a banner that already contains its own text stays clean)
+  const hasText =
+    slide.showText === true &&
+    Boolean((slide.title || '').trim() || (slide.subtitle || '').trim() || (slide.ctaText || '').trim());
+  const heightKey = slide.height || 'compact';
+  const heightClasses: Record<string, string> = {
+    auto: '',
+    compact: 'aspect-[2/1] sm:aspect-[3/1]',
+    medium: 'aspect-[16/9] sm:aspect-[5/2]',
+    tall: 'aspect-[4/3] sm:aspect-[2/1]',
+  };
+  const fixedHeight = heightKey !== 'auto';
   const dark = slide.textTheme === 'dark';
 
   const go = () => {
@@ -84,17 +95,19 @@ export const HeroSlider: React.FC<HeroSliderProps> = ({ slides = [], onNavigate 
       }}
     >
       <div
-        className={`relative ${link ? 'cursor-pointer' : ''}`}
+        className={`relative overflow-hidden ${heightClasses[heightKey] ?? heightClasses.compact} ${link ? 'cursor-pointer' : ''}`}
         onClick={go}
         role={link ? 'link' : undefined}
       >
-        <picture key={slide.id} className="block animate-in fade-in duration-500">
+        <picture key={slide.id} className={`block w-full ${fixedHeight ? 'h-full' : ''}`}>
           {slide.mobileImage && <source media="(max-width: 639px)" srcSet={slide.mobileImage} />}
           <img
             src={slide.desktopImage}
             alt={(slide.title || 'HYDEE').trim()}
             draggable={false}
-            className="block w-full h-auto mix-blend-multiply select-none"
+            className={`block w-full mix-blend-multiply select-none ${
+              fixedHeight ? 'h-full object-cover object-center' : 'h-auto'
+            }`}
           />
         </picture>
 
