@@ -126,7 +126,18 @@ export const formatOrderDateTime = (dateString?: string): string => {
   }
 };
 
-type OrderTab = 'confirmed' | 'review' | 'leads' | 'abandoned' | 'all';
+type OrderTab = 'new' | 'processing' | 'shipped' | 'delivered' | 'cancelled' | 'review' | 'leads' | 'abandoned' | 'all';
+
+// Where an order sits after its status changes (used for the "moved to ..." message)
+const TAB_LABEL_FOR_STATUS: Record<string, string> = {
+  CONFIRMED: '🆕 New Orders',
+  PENDING_ADVANCE: '🆕 New Orders',
+  PROCESSING: '📦 Packaging',
+  SHIPPED: '🚚 Shipped',
+  DELIVERED: '✅ Delivered',
+  CANCELLED: '❌ Cancelled',
+  REFUNDED: '❌ Cancelled',
+};
 
 // Prepayment order where the customer typed a TrxID and the shop must check the bKash/Nagad app
 const isPaymentReview = (o: Order) => o.status === 'PENDING_ADVANCE' && o.paymentStatus === 'MANUAL_REVIEW';
@@ -146,6 +157,33 @@ const leadWhatsAppLink = (o: Order) => {
     `আসসালামু আলাইকুম ${o.customerName}, HYDEE থেকে বলছি। আপনার ৳${o.totalAmount.toLocaleString()} টাকার অর্ডারটি (${o.orderNumber}) চেকআউটে অসম্পূর্ণ অবস্থায় আছে। ` +
     `আপনি কি এটি ক্যাশ অন ডেলিভারিতে (ডেলিভারির সময় টাকা দিয়ে) নিতে চান?`;
   return `https://wa.me/${intl}?text=${encodeURIComponent(msg)}`;
+};
+
+// Which section (tab) an order belongs to
+const isNewOrder = (o: Order) =>
+  !isPaymentReview(o) && !isIncompleteLead(o) && (o.status === 'CONFIRMED' || o.status === 'PENDING_ADVANCE');
+
+const inTab = (o: Order, t: OrderTab): boolean => {
+  switch (t) {
+    case 'all':
+      return true;
+    case 'review':
+      return isPaymentReview(o);
+    case 'leads':
+      return isIncompleteLead(o);
+    case 'new':
+      return isNewOrder(o);
+    case 'processing':
+      return o.status === 'PROCESSING';
+    case 'shipped':
+      return o.status === 'SHIPPED';
+    case 'delivered':
+      return o.status === 'DELIVERED';
+    case 'cancelled':
+      return o.status === 'CANCELLED' || o.status === 'REFUNDED';
+    default:
+      return false;
+  }
 };
 
 const timeAgo = (iso: string): string => {
@@ -171,7 +209,7 @@ export const AdminOrders: React.FC = () => {
   const [orders, setOrders] = useState<Order[]>(store.getOrders());
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [tab, setTab] = useState<OrderTab>('confirmed');
+  const [tab, setTab] = useState<OrderTab>('new');
   const [leads, setLeads] = useState<CheckoutLead[]>([]);
   const [leadsError, setLeadsError] = useState<string | null>(null);
   const [leadsLoading, setLeadsLoading] = useState(false);
@@ -195,12 +233,27 @@ export const AdminOrders: React.FC = () => {
   // Test order notification
   const [testSuccessNotice, setTestSuccessNotice] = useState<string | null>(null);
 
+  // When the database finishes loading (right after a page refresh), show the latest orders
+  useEffect(() => {
+    const unsubscribe = store.subscribe(() => setOrders(store.getOrders()));
+    return () => {
+      if (typeof unsubscribe === 'function') unsubscribe();
+    };
+  }, []);
+
   const refreshOrders = () => {
     const updated = store.getOrders();
     setOrders(updated);
     if (selectedOrder) {
       setSelectedOrder(store.getOrderById(selectedOrder.id) || null);
     }
+  };
+
+  const noticeMoved = (orderNumber: string, status: OrderStatus) => {
+    setActionNotice({
+      type: 'ok',
+      text: `${orderNumber} → "${TAB_LABEL_FOR_STATUS[status] || status}" section এ চলে গেছে।`,
+    });
   };
 
   const handleUpdateStatus = (orderNumber: string, newStatus: OrderStatus) => {
@@ -216,11 +269,13 @@ export const AdminOrders: React.FC = () => {
     if (newStatus === 'DELIVERED') {
       // Mark delivered and collect COD
       store.markOrderDelivered(orderNumber);
+      noticeMoved(orderNumber, 'DELIVERED');
       refreshOrders();
       return;
     }
 
     store.updateOrderStatus(orderNumber, newStatus, `Staff updated order status to ${newStatus}`);
+    noticeMoved(orderNumber, newStatus);
     refreshOrders();
   };
 
@@ -250,11 +305,13 @@ export const AdminOrders: React.FC = () => {
     setIsDispatchModalOpen(false);
     setDispatchTrackingCode('');
     setDispatchNote('');
+    noticeMoved(dispatchOrderTarget.orderNumber, 'SHIPPED');
     refreshOrders();
   };
 
   const handleQuickMarkDelivered = (orderNumber: string) => {
     store.markOrderDelivered(orderNumber);
+    noticeMoved(orderNumber, 'DELIVERED');
     refreshOrders();
   };
 
@@ -420,18 +477,13 @@ export const AdminOrders: React.FC = () => {
       order.customerPhone.includes(search) ||
       (order.courierTrackingCode && order.courierTrackingCode.toLowerCase().includes(search.toLowerCase()));
 
-    const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
-    const matchesTab =
-      tab === 'all' ||
-      (tab === 'review' && isPaymentReview(order)) ||
-      (tab === 'leads' && isIncompleteLead(order)) ||
-      (tab === 'confirmed' && !isPaymentReview(order) && !isIncompleteLead(order));
-    return matchesSearch && matchesStatus && matchesTab;
+    const matchesStatus = tab !== 'all' || statusFilter === 'all' || order.status === statusFilter;
+    return matchesSearch && matchesStatus && inTab(order, tab);
   });
 
   const reviewCount = orders.filter(isPaymentReview).length;
   const leadsCount = orders.filter(isIncompleteLead).length;
-  const confirmedCount = orders.filter((o) => !isPaymentReview(o) && !isIncompleteLead(o)).length;
+  const tabCount = (t: OrderTab) => orders.filter((o) => inTab(o, t)).length;
 
   return (
     <div className="space-y-6">
@@ -479,7 +531,11 @@ export const AdminOrders: React.FC = () => {
       {/* Order tabs */}
       <div className="flex flex-wrap gap-2">
         {([
-          ['confirmed', `📦 Confirmed Orders (${confirmedCount})`],
+          ['new', `🆕 New Orders (${tabCount('new')})`],
+          ['processing', `📦 Packaging (${tabCount('processing')})`],
+          ['shipped', `🚚 Shipped (${tabCount('shipped')})`],
+          ['delivered', `✅ Delivered (${tabCount('delivered')})`],
+          ['cancelled', `❌ Cancelled (${tabCount('cancelled')})`],
           ['review', `🔎 Verify Payment (${reviewCount})`],
           ['leads', `⚡ Incomplete Leads (${leadsCount})`],
           ['abandoned', `🛒 Abandoned Checkouts (${visibleLeads.length})`],
@@ -616,6 +672,7 @@ export const AdminOrders: React.FC = () => {
           />
         </div>
 
+        {tab === 'all' && (
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
@@ -629,40 +686,51 @@ export const AdminOrders: React.FC = () => {
           <option value="DELIVERED">Delivered & Collected</option>
           <option value="CANCELLED">Cancelled</option>
         </select>
+        )}
       </div>
 
       {/* Orders Table */}
       <div className="bg-white rounded-2xl border border-neutral-200 shadow-xs overflow-hidden">
         <div className="overflow-x-auto no-scrollbar">
           <table className="w-full text-left text-xs">
-            <thead className="bg-neutral-50/70 border-b border-neutral-200 text-neutral-500 uppercase font-semibold">
+            <thead className="bg-neutral-50/70 border-b border-neutral-200 text-neutral-500 uppercase text-[10px] tracking-wider font-semibold">
               <tr>
-                <th className="p-4">Order Ref & Time</th>
-                <th className="p-4">Customer</th>
-                <th className="p-4">Total Value</th>
-                <th className="p-4">Payment Method</th>
-                <th className="p-4">Doorstep Collection</th>
-                <th className="p-4">Order Status & Courier</th>
-                <th className="p-4 text-right">Actions</th>
+                <th className="px-4 py-3">Order</th>
+                <th className="px-4 py-3">Customer</th>
+                <th className="px-4 py-3">Payment</th>
+                <th className="px-4 py-3">Status & Courier</th>
+                <th className="px-4 py-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-100">
               {filteredOrders.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="p-8 text-center text-neutral-400">
-                    No orders matching criteria.
+                  <td colSpan={5} className="p-10 text-center text-neutral-400">
+                    এই section এ এখন কোনো অর্ডার নেই।
                   </td>
                 </tr>
               ) : (
                 filteredOrders.map((order) => {
-                  const isDelivered =
-                    order.status === 'DELIVERED' || order.paymentStatus === 'COD_COLLECTED';
+                  const isDelivered = order.status === 'DELIVERED' || order.paymentStatus === 'COD_COLLECTED';
                   const isShipped = order.status === 'SHIPPED';
+                  const isPaid = order.paymentStatus === 'FULLY_PAID' || order.paymentStatus === 'ADVANCE_VERIFIED';
+                  const fullPrepaid = order.paymentType === 'full_prepaid' || Boolean(order.isFullPayment);
+                  const kind = isPaymentReview(order)
+                    ? 'review'
+                    : isIncompleteLead(order)
+                    ? 'lead'
+                    : isPaid
+                    ? 'paid'
+                    : fullPrepaid
+                    ? 'unpaid'
+                    : 'cod';
+                  const pill = 'text-[10px] font-semibold px-2 py-1 rounded-md border cursor-pointer transition-colors';
 
                   return (
-                    <tr key={order.id} className="hover:bg-neutral-50/50 transition-colors">
-                      <td className="p-4">
-                        <div className="font-mono font-bold text-neutral-900 tracking-wider tabular-nums flex items-center gap-1.5">
+                    <tr key={order.id} className="hover:bg-neutral-50/60 transition-colors align-top">
+                      {/* Order: ref, date and time */}
+                      <td className="px-4 py-3.5 whitespace-nowrap">
+                        <div className="font-mono font-bold text-neutral-900 text-[13px] tracking-wide flex items-center gap-1.5">
                           <span>{order.orderNumber}</span>
                           {order.isTestOrder && (
                             <span className="text-[9px] bg-amber-100 text-amber-900 px-1.5 py-0.5 rounded-sm font-sans font-bold">
@@ -670,128 +738,121 @@ export const AdminOrders: React.FC = () => {
                             </span>
                           )}
                         </div>
-                        <div className="text-[11px] text-neutral-500 font-sans mt-1 flex items-center gap-1 font-medium">
+                        <div className="text-[11px] text-neutral-500 mt-1 flex items-center gap-1 font-medium">
                           <Clock className="w-3 h-3 text-[#800000]" />
                           <span>{formatOrderDateTime(order.createdAt)}</span>
                         </div>
                       </td>
-                      <td className="p-4">
-                        <p className="font-semibold text-neutral-900">{order.customerName}</p>
-                        <p className="font-mono text-[11px] text-neutral-500 tabular-nums">
-                          {order.customerPhone}
-                        </p>
-                        <p className="text-[10px] text-neutral-400 truncate max-w-xs">{order.district}</p>
+
+                      {/* Customer */}
+                      <td className="px-4 py-3.5">
+                        <p className="font-semibold text-neutral-900 text-[13px]">{order.customerName}</p>
+                        <p className="font-mono text-[11px] text-neutral-600 tabular-nums mt-0.5">{order.customerPhone}</p>
+                        <p className="text-[11px] text-neutral-400 mt-0.5 max-w-[240px] leading-snug">{order.district}</p>
                       </td>
-                      <td className="p-4 font-sans font-bold text-neutral-900 tabular-nums">
-                        ৳{order.totalAmount.toLocaleString()}
-                      </td>
-                      <td className="p-4">
-                        {order.paymentType === 'advance_cod' ? (
-                          <div>
-                            <span className="text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-md text-[10px] font-bold font-sans flex items-center gap-1 w-fit">
-                              <Banknote className="w-3 h-3 text-blue-600" />
-                              Cash On Delivery
+
+                      {/* Payment: one clear badge + amount */}
+                      <td className="px-4 py-3.5">
+                        <div className="font-bold text-neutral-900 tabular-nums text-sm">৳{order.totalAmount.toLocaleString()}</div>
+
+                        {kind === 'cod' && (
+                          isDelivered ? (
+                            <>
+                              <span className="mt-1 inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
+                                <CheckCircle2 className="w-3 h-3" /> COD collected
+                              </span>
+                              <p className="text-[10px] text-neutral-500 mt-0.5">৳{order.remainingCodAmount.toLocaleString()} received</p>
+                            </>
+                          ) : (
+                            <>
+                              <span className="mt-1 inline-flex items-center gap-1 text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-md">
+                                <Banknote className="w-3 h-3" /> Cash on Delivery
+                              </span>
+                              <p className="text-[10px] font-semibold text-[#800000] mt-0.5">
+                                Collect ৳{order.remainingCodAmount.toLocaleString()}
+                              </p>
+                            </>
+                          )
+                        )}
+
+                        {kind === 'paid' && (
+                          <>
+                            <span className="mt-1 inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
+                              <ShieldCheck className="w-3 h-3" /> Paid online
                             </span>
-                            <span className="text-[10px] text-neutral-500 block mt-0.5">
-                              0% Advance Required
-                            </span>
-                          </div>
-                        ) : order.paymentStatus === 'ADVANCE_VERIFIED' || order.paymentStatus === 'FULLY_PAID' ? (
-                          <div>
-                            <span className="text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md text-[10px] font-bold font-sans tabular-nums flex items-center gap-1 w-fit">
-                              <ShieldCheck className="w-3 h-3" />
-                              ৳{order.totalAmount.toLocaleString()} Pre-paid
-                            </span>
-                            <span className="text-[10px] text-neutral-500 block mt-0.5 font-mono">
+                            <p className="text-[10px] text-neutral-500 mt-0.5 font-mono">
                               {order.advancePaymentMethod?.toUpperCase()} · {order.transactionId}
+                            </p>
+                            {order.remainingCodAmount > 0 && !isDelivered && (
+                              <p className="text-[10px] font-semibold text-[#800000]">
+                                + Collect ৳{order.remainingCodAmount.toLocaleString()}
+                              </p>
+                            )}
+                          </>
+                        )}
+
+                        {kind === 'review' && (
+                          <>
+                            <span className="mt-1 inline-block text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-md">
+                              Check payment
                             </span>
-                          </div>
-                        ) : isPaymentReview(order) ? (
-                          <div>
-                            <span className="text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-md text-[10px] font-bold font-sans block w-fit">
-                              Awaiting your check
-                            </span>
-                            <span className="text-[10px] text-neutral-700 block mt-0.5 font-mono">
+                            <p className="text-[10px] text-neutral-600 mt-0.5 font-mono">
                               {order.advancePaymentMethod?.toUpperCase()} · {order.transactionId}
-                            </span>
-                            <div className="flex gap-3 mt-1">
-                              <button
-                                onClick={() => handleApprovePayment(order)}
-                                className="text-[10px] text-emerald-700 font-bold hover:underline cursor-pointer"
-                              >
+                            </p>
+                            <div className="flex flex-wrap gap-1.5 mt-1.5">
+                              <button onClick={() => handleApprovePayment(order)} className={`${pill} text-emerald-700 bg-emerald-50 border-emerald-200 hover:bg-emerald-100`}>
                                 ✓ Money received
                               </button>
-                              <button
-                                onClick={() => handleRejectPayment(order)}
-                                className="text-[10px] text-red-700 font-bold hover:underline cursor-pointer"
-                              >
+                              <button onClick={() => handleRejectPayment(order)} className={`${pill} text-red-700 bg-red-50 border-red-200 hover:bg-red-100`}>
                                 ✗ Not received
                               </button>
                             </div>
-                          </div>
-                        ) : (
-                          <div>
-                            <span className="text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md text-[10px] font-bold font-sans tabular-nums block w-fit">
-                              Incomplete · no payment yet
+                          </>
+                        )}
+
+                        {kind === 'lead' && (
+                          <>
+                            <span className="mt-1 inline-block text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md">
+                              Not paid yet
                             </span>
-                            <div className="flex flex-col gap-0.5 mt-1">
+                            <div className="flex flex-wrap gap-1.5 mt-1.5">
                               <a
                                 href={leadWhatsAppLink(order)}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="text-[10px] text-emerald-700 font-semibold hover:underline"
+                                className={`${pill} text-emerald-700 bg-emerald-50 border-emerald-200 hover:bg-emerald-100`}
                               >
-                                💬 WhatsApp follow-up
+                                💬 WhatsApp
                               </a>
-                              <button
-                                onClick={() => handleConvertLeadToCod(order)}
-                                className="text-[10px] text-[#800000] font-semibold hover:underline text-left cursor-pointer"
-                              >
-                                ⚡ Convert to COD
+                              <button onClick={() => handleConvertLeadToCod(order)} className={`${pill} text-[#800000] bg-red-50 border-red-200 hover:bg-red-100`}>
+                                ⚡ Make COD
                               </button>
                               <button
                                 onClick={() => {
                                   setSelectedOrder(order);
                                   setIsVerifyModalOpen(true);
                                 }}
-                                className="text-[10px] text-neutral-600 font-semibold hover:underline text-left cursor-pointer"
+                                className={`${pill} text-neutral-700 bg-white border-neutral-200 hover:bg-neutral-50`}
                               >
-                                + Manual Verify TrxID
+                                + Verify TrxID
                               </button>
                             </div>
-                          </div>
+                          </>
+                        )}
+
+                        {kind === 'unpaid' && (
+                          <span className="mt-1 inline-block text-[10px] font-bold text-neutral-600 bg-neutral-100 border border-neutral-200 px-2 py-0.5 rounded-md">
+                            Prepayment not received
+                          </span>
                         )}
                       </td>
-                      <td className="p-4">
-                        {order.paymentType === 'full_prepaid' && (order.paymentStatus === 'FULLY_PAID' || order.paymentStatus === 'ADVANCE_VERIFIED') ? (
-                          <div>
-                            <span className="text-neutral-600 bg-neutral-100 border border-neutral-200 px-2 py-0.5 rounded-md text-[10px] font-bold">
-                              ৳0 (100% Pre-paid)
-                            </span>
-                            <span className="text-[10px] text-neutral-400 block mt-0.5">No Doorstep Due</span>
-                          </div>
-                        ) : isDelivered ? (
-                          <div>
-                            <span className="text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-md text-[10px] font-bold font-sans tabular-nums inline-flex items-center gap-1">
-                              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                              ৳{order.remainingCodAmount.toLocaleString()} Collected
-                            </span>
-                            <span className="text-[10px] text-neutral-400 block mt-0.5">Paid on Delivery</span>
-                          </div>
-                        ) : (
-                          <div>
-                            <span className="font-sans font-bold text-[#800000] tabular-nums block text-xs">
-                              ৳{order.remainingCodAmount.toLocaleString()}
-                            </span>
-                            <span className="text-[10px] text-neutral-500 block">Due on Delivery</span>
-                          </div>
-                        )}
-                      </td>
-                      <td className="p-4">
+
+                      {/* Status + courier */}
+                      <td className="px-4 py-3.5">
                         <select
                           value={order.status}
                           onChange={(e) => handleUpdateStatus(order.orderNumber, e.target.value as OrderStatus)}
-                          className={`text-[11px] font-bold px-2.5 py-1 rounded-lg border focus:outline-hidden ${
+                          className={`text-[11px] font-bold px-2.5 py-1.5 rounded-lg border focus:outline-hidden cursor-pointer ${
                             order.status === 'CONFIRMED'
                               ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
                               : order.status === 'PROCESSING'
@@ -813,29 +874,27 @@ export const AdminOrders: React.FC = () => {
                           <option value="CANCELLED">Cancelled</option>
                         </select>
 
-                        {/* Courier Details Line */}
-                        <div className="mt-1 text-[10px]">
+                        <div className="mt-1.5 text-[10px]">
                           {order.courierTrackingCode ? (
                             <span className="text-neutral-700 font-medium flex items-center gap-1">
                               <Truck className="w-3 h-3 text-blue-600" />
-                              <span>{order.courierName}: </span>
+                              <span>{order.courierName}:</span>
                               <span className="font-mono font-bold text-neutral-900">{order.courierTrackingCode}</span>
                             </span>
                           ) : (
-                            <span className="text-neutral-400">
-                              {order.courierName} · Not Dispatched
-                            </span>
+                            <span className="text-neutral-400">Not dispatched yet</span>
                           )}
                         </div>
                       </td>
-                      <td className="p-4 text-right space-x-2 whitespace-nowrap">
-                        {/* Quick Action Button */}
-                        {!isDelivered && order.status !== 'PENDING_ADVANCE' && order.status !== 'CANCELLED' && (
-                          <>
-                            {!isShipped ? (
+
+                      {/* Actions */}
+                      <td className="px-4 py-3.5">
+                        <div className="flex flex-wrap items-center justify-end gap-1.5">
+                          {!isDelivered && order.status !== 'PENDING_ADVANCE' && order.status !== 'CANCELLED' && (
+                            !isShipped ? (
                               <button
                                 onClick={() => openDispatchModal(order)}
-                                className="text-[11px] bg-blue-50 hover:bg-blue-100 text-blue-700 px-2.5 py-1 rounded-md font-semibold inline-flex items-center gap-1 cursor-pointer"
+                                className="text-[11px] bg-blue-50 hover:bg-blue-100 text-blue-700 px-2.5 py-1.5 rounded-lg font-semibold inline-flex items-center gap-1 cursor-pointer"
                                 title="Dispatch parcel via courier with consignment ID"
                               >
                                 <Truck className="w-3 h-3" />
@@ -844,33 +903,32 @@ export const AdminOrders: React.FC = () => {
                             ) : (
                               <button
                                 onClick={() => handleQuickMarkDelivered(order.orderNumber)}
-                                className="text-[11px] bg-emerald-50 hover:bg-emerald-100 text-emerald-800 px-2.5 py-1 rounded-md font-semibold inline-flex items-center gap-1 cursor-pointer"
+                                className="text-[11px] bg-emerald-50 hover:bg-emerald-100 text-emerald-800 px-2.5 py-1.5 rounded-lg font-semibold inline-flex items-center gap-1 cursor-pointer"
                                 title="Mark order as delivered and COD collected"
                               >
                                 <CheckCircle2 className="w-3 h-3 text-emerald-600" />
                                 <span>Collect COD</span>
                               </button>
-                            )}
-                          </>
-                        )}
+                            )
+                          )}
 
-                        <button
-                          onClick={() => setSelectedOrder(order)}
-                          className="text-xs text-[#800000] font-semibold hover:underline inline-flex items-center gap-1 cursor-pointer"
-                          title="View order details and items"
-                        >
-                          <Eye className="w-3.5 h-3.5" />
-                          <span>Details</span>
-                        </button>
+                          <button
+                            onClick={() => setSelectedOrder(order)}
+                            className="text-[11px] text-[#800000] bg-red-50/60 hover:bg-red-50 px-2.5 py-1.5 rounded-lg font-semibold inline-flex items-center gap-1 cursor-pointer"
+                            title="View order details and items"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>Details</span>
+                          </button>
 
-                        <button
-                          onClick={() => setOrderToDelete(order)}
-                          className="text-xs text-neutral-400 hover:text-red-700 hover:bg-red-50 p-1 rounded-md transition-colors cursor-pointer inline-flex items-center gap-1"
-                          title="Delete Order Permanently"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                          <span className="hidden xl:inline">Delete</span>
-                        </button>
+                          <button
+                            onClick={() => setOrderToDelete(order)}
+                            className="text-neutral-400 hover:text-red-700 hover:bg-red-50 p-1.5 rounded-lg transition-colors cursor-pointer"
+                            title="Delete Order Permanently"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
