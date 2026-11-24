@@ -215,6 +215,10 @@ export interface HeroSlide {
   align: 'left' | 'center' | 'right';
   // Text colour used when a headline / button is written on top of the picture
   textTheme?: 'light' | 'dark';
+  // Write the headline / button on top of the picture? (off unless the admin turns it on)
+  showText?: boolean;
+  // How tall the banner is on the homepage. Default "compact" trims empty space above and below.
+  height?: 'auto' | 'compact' | 'medium' | 'tall';
   isActive: boolean;
   order: number;
 }
