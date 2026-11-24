@@ -46,6 +46,8 @@ export const AdminHomepage: React.FC = () => {
   const [slideMobileImg, setSlideMobileImg] = useState('');
   const [slideAlign, setSlideAlign] = useState<'left' | 'center' | 'right'>('left');
   const [slideTheme, setSlideTheme] = useState<'light' | 'dark'>('light');
+  const [slideShowText, setSlideShowText] = useState(false);
+  const [slideHeight, setSlideHeight] = useState<'auto' | 'compact' | 'medium' | 'tall'>('compact');
   const [uploading, setUploading] = useState<'desktop' | 'mobile' | null>(null);
   const [uploadWarning, setUploadWarning] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -75,6 +77,8 @@ export const AdminHomepage: React.FC = () => {
     setSlideMobileImg(slide?.mobileImage && slide.mobileImage !== slide.desktopImage ? slide.mobileImage : '');
     setSlideAlign(slide?.align || 'left');
     setSlideTheme(slide?.textTheme || 'light');
+    setSlideShowText(slide?.showText === true);
+    setSlideHeight(slide?.height || 'compact');
     setUploadWarning(null);
   };
 
@@ -149,6 +153,8 @@ export const AdminHomepage: React.FC = () => {
       mobileImage: slideMobileImg.trim() || slideDesktopImg.trim(),
       align: slideAlign,
       textTheme: slideTheme,
+      showText: slideShowText,
+      height: slideHeight,
     };
     const updated = isNewSlide ? [...slides, saved] : slides.map((s) => (s.id === saved.id ? saved : s));
 
@@ -513,6 +519,24 @@ export const AdminHomepage: React.FC = () => {
                 </div>
               </div>
 
+              {/* Banner height */}
+              <div>
+                <label className="block font-semibold mb-1">ব্যানারের উচ্চতা (Height)</label>
+                <select
+                  value={slideHeight}
+                  onChange={(e) => setSlideHeight(e.target.value as 'auto' | 'compact' | 'medium' | 'tall')}
+                  className="w-full p-3 border border-neutral-200 rounded-xl bg-white"
+                >
+                  <option value="compact">Compact (ছোট, উপর-নিচের ফাঁকা জায়গা কেটে যাবে) ← সাধারণত এটাই ভালো</option>
+                  <option value="medium">Medium (মাঝারি)</option>
+                  <option value="tall">Tall (লম্বা)</option>
+                  <option value="auto">Auto (পুরো ছবি, কিছুই কাটবে না)</option>
+                </select>
+                <p className="text-[11px] text-neutral-500 mt-1 leading-relaxed">
+                  ছবির উপরে-নিচে সাদা ফাঁকা জায়গা বেশি থাকলে Compact দিন। ছবির কোনো অংশ কেটে গেলে Medium / Tall / Auto বেছে নিন।
+                </p>
+              </div>
+
               {uploadWarning && (
                 <div className="p-3 bg-amber-50 border border-amber-200 text-amber-900 rounded-xl leading-relaxed">{uploadWarning}</div>
               )}
@@ -553,8 +577,21 @@ export const AdminHomepage: React.FC = () => {
 
               {/* Optional text on the picture */}
               <div className="p-4 bg-neutral-50 border border-neutral-200 rounded-xl space-y-3">
-                <p className="font-semibold">ছবির উপরে লেখা (ঐচ্ছিক, খালি রাখলে শুধু ছবি দেখাবে)</p>
-                <div>
+                <label className="flex items-start gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={slideShowText}
+                    onChange={(e) => setSlideShowText(e.target.checked)}
+                    className="mt-0.5 w-4 h-4 accent-[#800000]"
+                  />
+                  <span>
+                    <span className="font-semibold block">ছবির উপরে লেখা ও বাটন দেখাব</span>
+                    <span className="text-[11px] text-neutral-500">
+                      ছবিতে আগে থেকেই লেখা থাকলে এটা বন্ধ রাখুন, নাহলে লেখার উপর লেখা পড়ে যাবে।
+                    </span>
+                  </span>
+                </label>
+                <div className={slideShowText ? '' : 'opacity-50'}>
                   <label className="block font-semibold mb-1">Headline</label>
                   <input
                     type="text"
