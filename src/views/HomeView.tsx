@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { ProductCard } from '../components/ProductCard';
 import { store } from '../services/store';
 import { Product } from '../types';
-import { ChevronLeft, ChevronRight, ArrowRight } from 'lucide-react';
+import { HeroSlider } from '../components/HeroSlider';
 
 interface HomeViewProps {
   onNavigate: (path: string) => void;
@@ -21,11 +21,13 @@ export const HomeView: React.FC<HomeViewProps> = ({
 }) => {
   const [categories, setCategories] = useState(store.getCategories());
   const [allProducts, setAllProducts] = useState(store.getPublishedProducts());
+  const [heroSlides, setHeroSlides] = useState(store.getHeroSlides());
 
   useEffect(() => {
     const unsubscribe = store.subscribe(() => {
       setCategories(store.getCategories());
       setAllProducts(store.getPublishedProducts());
+      setHeroSlides(store.getHeroSlides());
     });
     return () => unsubscribe();
   }, []);
@@ -33,59 +35,11 @@ export const HomeView: React.FC<HomeViewProps> = ({
   // Active category filter on homepage
   const [selectedCategorySlug, setSelectedCategorySlug] = useState<string>('all');
 
-  // Dynamically generate hero showcase from real products (NO fake mock products)
-  const heroShowcaseData = React.useMemo(() => {
-    if (allProducts.length === 0) {
-      return [
-        {
-          id: 0,
-          categorySlug: 'all',
-          categoryLabel: 'HYDEE Collection',
-          headlinePart1: 'HYDEE Bespoke',
-          headlinePart2: 'Luxury In Every Fold',
-          description: 'Handcrafted haute couture silhouettes designed with generational artisanal legacy in Tangail, Bangladesh.',
-          tagline: 'Handcrafted in Tangail · 100% Bespoke Elegance',
-          productSlug: '',
-          bgImage: '/images/editorial-glory-red.jpg',
-          bgPosition: 'center 18%',
-        },
-      ];
-    }
-
-    const featured = allProducts.filter((p) => p.isFeatured || p.isHangerFeatured);
-    const pool = featured.length > 0 ? featured : allProducts;
-
-    return pool.slice(0, 6).map((p, idx) => {
-      const words = p.name.split(' ');
-      const p1 = words.slice(0, Math.min(3, words.length)).join(' ');
-      const p2 = words.slice(Math.min(3, words.length)).join(' ') || 'Atelier Collection';
-      return {
-        id: idx,
-        categorySlug: p.categorySlug,
-        categoryLabel: p.categoryName || 'Exclusive Piece',
-        headlinePart1: p1,
-        headlinePart2: p2,
-        description: p.shortDescription || p.description?.slice(0, 150) || 'Luxury in every fold. Handcrafted in Tangail.',
-        tagline: `৳${p.price.toLocaleString()} · Handcrafted in Tangail`,
-        productSlug: p.slug,
-        bgImage: p.images[0] || '/images/editorial-glory-red.jpg',
-        bgPosition: 'center 18%',
-      };
-    });
-  }, [allProducts]);
-
-  const [activeSlide, setActiveSlide] = useState(0);
-
-  const safeSlideIndex = activeSlide < heroShowcaseData.length ? activeSlide : 0;
-  const currentHero = heroShowcaseData[safeSlideIndex] || heroShowcaseData[0];
-
-  const nextSlide = () => {
-    setActiveSlide((prev) => (prev + 1) % heroShowcaseData.length);
-  };
-
-  const prevSlide = () => {
-    setActiveSlide((prev) => (prev - 1 + heroShowcaseData.length) % heroShowcaseData.length);
-  };
+  // Hero banners are chosen by the admin (Admin > Homepage). Nothing is generated from products.
+  const activeHeroSlides = React.useMemo(
+    () => heroSlides.filter((sl) => sl.isActive && sl.desktopImage),
+    [heroSlides]
+  );
 
   // Drag-to-scroll & Touch support for circular categories
   const categoryScrollRef = useRef<HTMLDivElement>(null);
@@ -129,116 +83,9 @@ export const HomeView: React.FC<HomeViewProps> = ({
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-10 sm:space-y-14 pt-3">
 
         {/* ========================================================
-            1. HERO SHOWCASE (Women Model Background in HYDEE Maroon Palette)
+            1. HERO BANNER (pictures selected by the admin)
            ======================================================== */}
-        <section className="relative rounded-3xl overflow-hidden bg-neutral-950 text-white shadow-2xl shadow-[#4A0000]/30 border border-[#990000]/40 transition-all min-h-[400px] sm:min-h-[460px] lg:min-h-[520px] flex flex-col justify-between p-6 sm:p-10 lg:p-14">
-          
-          {/* Full-bleed Women Model Background with HYDEE Royal Maroon Gradient Overlay */}
-          <div
-            className="absolute inset-0 bg-cover transition-all duration-1000 ease-in-out scale-102"
-            style={{
-              backgroundImage: `url(${currentHero.bgImage})`,
-              backgroundPosition: currentHero.bgPosition || 'center 20%',
-            }}
-          >
-            {/* Deep Rich HYDEE Maroon Gradient Overlay (Protects readability, showcases luxury woman model) */}
-            <div className="absolute inset-0 bg-gradient-to-r from-[#4A0000]/95 via-[#660000]/80 to-[#800000]/30 sm:from-[#4A0000]/90 sm:via-[#660000]/60 sm:to-transparent" />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-transparent to-black/30" />
-          </div>
-
-          {/* Top Pill Category Navigation */}
-          <div className="relative z-20 flex justify-center sm:justify-start mb-6 sm:mb-8">
-            <div className="bg-black/45 backdrop-blur-md border border-white/20 rounded-full p-1 sm:p-1.5 flex items-center gap-1 sm:gap-1.5 max-w-full overflow-x-auto no-scrollbar touch-scroll">
-              {heroShowcaseData.map((item, idx) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => setActiveSlide(idx)}
-                  className={`text-[11px] sm:text-xs font-semibold px-3.5 sm:px-4 py-1.5 sm:py-2 rounded-full transition-all cursor-pointer whitespace-nowrap shrink-0 ${
-                    activeSlide === idx
-                      ? 'bg-white text-neutral-950 shadow-md font-bold scale-102'
-                      : 'text-white/80 hover:text-white hover:bg-white/10'
-                  }`}
-                >
-                  {item.categoryLabel}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Main Hero Content: Headlines, Description & Action Button */}
-          <div className="relative z-10 max-w-xl space-y-4 text-left my-auto">
-            {/* Minimal Navigation Arrows */}
-            <div className="flex items-center space-x-2">
-              <button
-                type="button"
-                onClick={prevSlide}
-                className="w-8 h-8 rounded-full bg-black/40 border border-white/25 text-white flex items-center justify-center hover:bg-white hover:text-neutral-950 transition-all cursor-pointer backdrop-blur-xs active:scale-95"
-                aria-label="Previous Outfit"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-              <button
-                type="button"
-                onClick={nextSlide}
-                className="w-8 h-8 rounded-full bg-black/40 border border-white/25 text-white flex items-center justify-center hover:bg-white hover:text-neutral-950 transition-all cursor-pointer backdrop-blur-xs active:scale-95"
-                aria-label="Next Outfit"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Bold Headline */}
-            <h1 className="font-sans text-3xl sm:text-4xl lg:text-5xl font-bold text-white tracking-tight leading-[1.12]">
-              {currentHero.headlinePart1} <br />
-              <span className="font-light text-white/90">{currentHero.headlinePart2}</span>
-            </h1>
-
-            {/* Concise Editorial Subtitle */}
-            <p className="text-xs sm:text-sm text-white/85 leading-relaxed font-normal max-w-md">
-              {currentHero.description}
-            </p>
-
-            {/* Action Pill Button: "Get The Look ->" */}
-            <div className="pt-2">
-              <button
-                type="button"
-                onClick={() => {
-                  if (currentHero && currentHero.productSlug) {
-                    onNavigate(`/products/${currentHero.productSlug}`);
-                  } else {
-                    onNavigate('/products');
-                  }
-                }}
-                className="bg-white hover:bg-neutral-100 text-neutral-950 font-bold text-xs sm:text-sm px-7 py-3 sm:px-8 sm:py-3.5 rounded-full tracking-wide flex items-center gap-2 shadow-xl hover:shadow-2xl transition-all cursor-pointer active:scale-95 border border-white/40"
-              >
-                <span>Get The Look</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-
-          {/* Bottom Indicators & Tagline */}
-          <div className="relative z-10 flex items-center justify-between pt-6 border-t border-white/10 text-xs text-white/70">
-            <span className="font-serif italic text-white/85 text-[11px] sm:text-xs">
-              {currentHero.tagline}
-            </span>
-            <div className="flex items-center space-x-1.5">
-              {heroShowcaseData.map((_, idx) => (
-                <button
-                  key={idx}
-                  type="button"
-                  onClick={() => setActiveSlide(idx)}
-                  className={`h-1.5 rounded-full transition-all cursor-pointer ${
-                    activeSlide === idx ? 'w-6 bg-white' : 'w-1.5 bg-white/40 hover:bg-white/70'
-                  }`}
-                  aria-label={`Slide ${idx + 1}`}
-                />
-              ))}
-            </div>
-          </div>
-
-        </section>
+        <HeroSlider slides={activeHeroSlides} onNavigate={onNavigate} />
 
         {/* ========================================================
             2. "OUR CATEGORIES" SECTION (Smooth Touch & Mouse Scrollable)
