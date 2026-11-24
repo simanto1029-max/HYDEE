@@ -13,6 +13,7 @@ import {
   Lock,
   ShieldCheck,
   AlertCircle,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { store } from '../../services/store';
 import { AdminDashboard } from './AdminDashboard';
@@ -22,13 +23,14 @@ import { AdminOrders } from './AdminOrders';
 import { AdminMarketing } from './AdminMarketing';
 import { AdminSettings } from './AdminSettings';
 import { AdminOffers } from './AdminOffers';
+import { AdminHomepage } from './AdminHomepage';
 
 interface AdminPortalProps {
   onNavigateHome: () => void;
   onNavigateToProduct: (slug: string) => void;
 }
 
-type AdminTabType = 'dashboard' | 'products' | 'categories' | 'orders' | 'marketing' | 'offers' | 'settings';
+type AdminTabType = 'dashboard' | 'products' | 'categories' | 'orders' | 'homepage' | 'marketing' | 'offers' | 'settings';
 
 const getTabFromPath = (path: string): AdminTabType => {
   const clean = path.toLowerCase();
@@ -36,6 +38,7 @@ const getTabFromPath = (path: string): AdminTabType => {
   if (clean.includes('/admin/products')) return 'products';
   if (clean.includes('/admin/catalog') || clean.includes('/admin/categories')) return 'categories';
   if (clean.includes('/admin/promotional') || clean.includes('/admin/marketing') || clean.includes('/admin/pixel')) return 'marketing';
+  if (clean.includes('/admin/homepage') || clean.includes('/admin/banner') || clean.includes('/admin/hero')) return 'homepage';
   if (clean.includes('/admin/offers')) return 'offers';
   if (clean.includes('/admin/settings') || clean.includes('/admin/setting')) return 'settings';
   return 'dashboard';
@@ -55,6 +58,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
       orders: '/admin/orders',
       products: '/admin/products',
       categories: '/admin/catalog',
+      homepage: '/admin/homepage',
       marketing: '/admin/promotional',
       offers: '/admin/offers',
       settings: '/admin/settings',
@@ -184,6 +188,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     { id: 'orders', label: 'Orders', icon: Package },
     { id: 'products', label: 'Products', icon: ShoppingBag },
     { id: 'categories', label: 'Catalog', icon: Layers },
+    { id: 'homepage', label: 'Homepage Banners', icon: ImageIcon },
     { id: 'marketing', label: 'Promotional & Pixel', icon: Tag },
     { id: 'offers', label: 'Offers & Badges', icon: Gift },
     { id: 'settings', label: 'Settings', icon: Settings },
@@ -274,6 +279,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           {activeTab === 'products' && <AdminProducts onNavigateToProduct={onNavigateToProduct} />}
           {activeTab === 'categories' && <AdminCategories />}
           {activeTab === 'orders' && <AdminOrders />}
+          {activeTab === 'homepage' && <AdminHomepage />}
           {activeTab === 'marketing' && <AdminMarketing />}
           {activeTab === 'offers' && <AdminOffers />}
           {activeTab === 'settings' && <AdminSettings />}
