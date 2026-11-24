@@ -1,90 +1,147 @@
-import React from 'react';
-import { ArrowRight, Sparkles } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
 import { HeroSlide } from '../types';
 
 interface HeroSliderProps {
+  // Only the banners the admin selected (Admin > Homepage). Nothing is created automatically.
   slides?: HeroSlide[];
   onNavigate: (path: string) => void;
 }
 
-export const HeroSlider: React.FC<HeroSliderProps> = ({ onNavigate }) => {
+// The picture is shown exactly as the admin uploaded it: full width, whole picture, no rounded corners,
+// no border, no shadow, no dark overlay. "multiply" makes a pure white picture background melt into the
+// page colour, so a banner with a white background looks like part of the website itself.
+export const HeroSlider: React.FC<HeroSliderProps> = ({ slides = [], onNavigate }) => {
+  const [index, setIndex] = useState(0);
+  const [paused, setPaused] = useState(false);
+  const touchStartX = useRef<number | null>(null);
+
+  const count = slides.length;
+  const safeIndex = count > 0 ? index % count : 0;
+  const slidesKey = slides.map((s) => `${s.id}|${s.desktopImage}|${s.mobileImage}`).join('~');
+
+  // Auto-play only when there is more than one banner
+  useEffect(() => {
+    if (count < 2 || paused) return;
+    const timer = setInterval(() => setIndex((i) => (i + 1) % count), 5000);
+    return () => clearInterval(timer);
+  }, [count, paused]);
+
+  // Load every banner picture in the background so changing slides is instant
+  useEffect(() => {
+    slides.forEach((s) => {
+      [s.desktopImage, s.mobileImage].forEach((src) => {
+        if (src) {
+          const img = new Image();
+          img.src = src;
+        }
+      });
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slidesKey]);
+
+  if (count === 0) return null;
+
+  const slide = slides[safeIndex];
+  const link = (slide.ctaLink || '').trim();
+  const hasText = Boolean((slide.title || '').trim() || (slide.subtitle || '').trim() || (slide.ctaText || '').trim());
+  const dark = slide.textTheme === 'dark';
+
+  const go = () => {
+    if (!link) return;
+    if (/^https?:\/\//i.test(link)) {
+      window.open(link, '_blank', 'noopener,noreferrer');
+    } else {
+      onNavigate(link.startsWith('/') ? link : `/${link}`);
+    }
+  };
+
+  const next = () => setIndex((i) => (i + 1) % count);
+  const prev = () => setIndex((i) => (i - 1 + count) % count);
+
+  const alignClasses =
+    slide.align === 'center'
+      ? 'items-center text-center'
+      : slide.align === 'right'
+      ? 'items-end text-right'
+      : 'items-start text-left';
+
   return (
-    <section className="relative w-full bg-white overflow-hidden border-b border-neutral-100">
-      <div className="max-w-7xl mx-auto px-6 sm:px-10 py-12 sm:py-20 lg:py-24">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-14 items-center">
-          
-          {/* Left Column: Editorial Luxury Headline & Narrative */}
-          <div className="lg:col-span-6 space-y-6 sm:space-y-8 text-left">
-            <div className="inline-flex items-center space-x-2 bg-neutral-50 border border-neutral-200/80 rounded-full px-3.5 py-1 text-xs text-[#800000] font-medium">
-              <Sparkles className="w-3.5 h-3.5 text-[#800000]" />
-              <span>Autumn / Festive Atelier 2026</span>
-            </div>
+    <section
+      className="relative w-full"
+      onMouseEnter={() => setPaused(true)}
+      onMouseLeave={() => setPaused(false)}
+      onTouchStart={(e) => {
+        touchStartX.current = e.touches[0].clientX;
+      }}
+      onTouchEnd={(e) => {
+        if (touchStartX.current === null || count < 2) return;
+        const dx = e.changedTouches[0].clientX - touchStartX.current;
+        touchStartX.current = null;
+        if (Math.abs(dx) > 50) {
+          if (dx < 0) next();
+          else prev();
+        }
+      }}
+    >
+      <div
+        className={`relative ${link ? 'cursor-pointer' : ''}`}
+        onClick={go}
+        role={link ? 'link' : undefined}
+      >
+        <picture key={slide.id} className="block animate-in fade-in duration-500">
+          {slide.mobileImage && <source media="(max-width: 639px)" srcSet={slide.mobileImage} />}
+          <img
+            src={slide.desktopImage}
+            alt={(slide.title || 'HYDEE').trim()}
+            draggable={false}
+            className="block w-full h-auto mix-blend-multiply select-none"
+          />
+        </picture>
 
-            <div className="space-y-4">
-              <h1 className="font-serif text-4xl sm:text-6xl lg:text-[68px] font-normal text-neutral-950 leading-[1.08] tracking-tight">
-                Sartorial Grace, <br />
-                <span className="italic font-light text-[#800000]">Crafted in Silk.</span>
-              </h1>
-              
-              <p className="text-sm sm:text-base text-neutral-600 font-normal leading-relaxed max-w-lg">
-                Bespoke couture and contemporary silhouettes tailored from fine mulberry silks, hand-combed wool, and heritage weaves. Delivered to your doorstep across Bangladesh with cash on delivery and secure prepayment.
+        {hasText && (
+          <div className={`absolute inset-0 flex flex-col justify-center gap-2 sm:gap-3 p-5 sm:p-10 lg:p-14 ${alignClasses}`}>
+            {(slide.title || '').trim() && (
+              <h2
+                className={`font-sans text-2xl sm:text-4xl lg:text-5xl font-bold tracking-tight leading-tight max-w-xl ${
+                  dark ? 'text-neutral-950' : 'text-white [text-shadow:0_2px_12px_rgba(0,0,0,0.45)]'
+                }`}
+              >
+                {slide.title}
+              </h2>
+            )}
+            {(slide.subtitle || '').trim() && (
+              <p
+                className={`text-xs sm:text-sm lg:text-base leading-relaxed max-w-md ${
+                  dark ? 'text-neutral-800' : 'text-white [text-shadow:0_1px_8px_rgba(0,0,0,0.5)]'
+                }`}
+              >
+                {slide.subtitle}
               </p>
-            </div>
-
-            {/* Editorial Action Buttons in Title Case */}
-            <div className="flex flex-wrap items-center gap-4 pt-2">
-              <button
-                onClick={() => onNavigate('/products')}
-                className="bg-[#800000] hover:bg-[#5c0000] text-white text-xs sm:text-[13px] font-semibold tracking-wider px-8 py-4 rounded-full transition-all duration-200 shadow-md hover:shadow-lg active:scale-95 flex items-center gap-2 cursor-pointer"
-              >
-                <span>Explore Collection</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
-
-              <button
-                onClick={() => {
-                  const el = document.getElementById('hanger');
-                  el?.scrollIntoView({ behavior: 'smooth' });
-                }}
-                className="bg-white hover:bg-neutral-50 text-neutral-900 border border-neutral-300 hover:border-neutral-900 text-xs sm:text-[13px] font-medium tracking-wide px-7 py-4 rounded-full transition-all duration-200 active:scale-95 cursor-pointer"
-              >
-                View Hanger Wardrobe
-              </button>
-            </div>
-
-            {/* Refined Minimalist Atelier Badges */}
-            <div className="pt-6 border-t border-neutral-100 flex items-center space-x-8 text-xs text-neutral-500">
-              <div>
-                <span className="font-semibold text-neutral-900 block text-sm">100% Bespoke</span>
-                <span>Dhaka Atelier Crafted</span>
-              </div>
-              <div className="w-[1px] h-8 bg-neutral-200" />
-              <div>
-                <span className="font-semibold text-neutral-900 block text-sm">Doorstep Inspection</span>
-                <span>Verified Cash On Delivery</span>
-              </div>
-            </div>
+            )}
+            {(slide.ctaText || '').trim() && (
+              <span className="inline-block mt-1 bg-[#800000] text-white text-xs sm:text-sm font-bold px-6 py-2.5 sm:px-8 sm:py-3 rounded-full">
+                {slide.ctaText}
+              </span>
+            )}
           </div>
-
-          {/* Right Column: Editorial Hero Campaign Visual */}
-          <div className="lg:col-span-6 relative">
-            <div className="relative aspect-[4/3] sm:aspect-[16/11] rounded-3xl overflow-hidden shadow-2xl shadow-neutral-900/10 border border-neutral-100 group">
-              <img
-                src="/assets/the_drop_hero.png"
-                alt="HYDEE Luxury Campaign"
-                className="w-full h-full object-cover object-center transition-transform duration-1000 ease-out group-hover:scale-103"
-              />
-              
-              {/* Subtle Atelier Tag */}
-              <div className="absolute bottom-5 left-5 bg-white/90 backdrop-blur-xs text-neutral-900 text-xs px-4 py-2 rounded-full shadow-sm font-medium flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-[#800000]" />
-                <span>The Seasonal Drop · Limited Release</span>
-              </div>
-            </div>
-          </div>
-
-        </div>
+        )}
       </div>
+
+      {count > 1 && (
+        <div className="flex items-center justify-center gap-1.5 pt-3">
+          {slides.map((s, i) => (
+            <button
+              key={s.id}
+              type="button"
+              onClick={() => setIndex(i)}
+              className={`h-1.5 rounded-full transition-all cursor-pointer ${
+                i === safeIndex ? 'w-6 bg-[#800000]' : 'w-1.5 bg-neutral-300 hover:bg-neutral-400'
+              }`}
+              aria-label={`Banner ${i + 1}`}
+            />
+          ))}
+        </div>
+      )}
     </section>
   );
 };
